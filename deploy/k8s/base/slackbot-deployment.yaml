@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slackbot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: slackbot
+  template:
+    metadata:
+      labels:
+        app: slackbot
+    spec:
+      serviceAccountName: slackbot-sa
+      containers:
+        - name: slackbot
+          image: ghcr.io/your-org/employee-slackbot:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - secretRef:
+                name: employee-ai-secrets
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "3000"
+            - name: MCP_GATEWAY_URL
+              value: http://mcp-gateway:8081
+            - name: ALLOWED_TOOLS_FILE
+              value: /app/config/allowed-tools.json
+          volumeMounts:
+            - name: allowed-tools-volume
+              mountPath: /app/config/allowed-tools.json
+              subPath: allowed-tools.json
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: allowed-tools-volume
+          configMap:
+            name: allowed-tools-config

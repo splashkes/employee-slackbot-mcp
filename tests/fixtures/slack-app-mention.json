@@ -1,0 +1,16 @@
+{
+  "token": "verification-token-placeholder",
+  "team_id": "T0123456789",
+  "api_app_id": "A0123456789",
+  "type": "event_callback",
+  "event_id": "Ev0123456789",
+  "event_time": 1767235200,
+  "event": {
+    "type": "app_mention",
+    "user": "U0123456789",
+    "text": "<@U0BOTID> get event status for AB4001",
+    "ts": "1767235200.000100",
+    "channel": "C0123456789",
+    "event_ts": "1767235200.000100"
+  }
+}

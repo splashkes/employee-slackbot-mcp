@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mcp-gateway
+  template:
+    metadata:
+      labels:
+        app: mcp-gateway
+    spec:
+      serviceAccountName: mcp-gateway-sa
+      containers:
+        - name: mcp-gateway
+          image: ghcr.io/your-org/employee-mcp-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+              name: http
+          envFrom:
+            - secretRef:
+                name: employee-ai-secrets
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "8081"
+            - name: ALLOWED_TOOLS_FILE
+              value: /app/config/allowed-tools.json
+          volumeMounts:
+            - name: allowed-tools-volume
+              mountPath: /app/config/allowed-tools.json
+              subPath: allowed-tools.json
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: allowed-tools-volume
+          configMap:
+            name: allowed-tools-config

@@ -1,0 +1,117 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-02-27T00:00:00Z",
+  "tools": [
+    {
+      "tool_name": "get_event_details",
+      "description": "Return basic event details by EID.",
+      "risk_level": "low",
+      "allowed_roles": ["ops", "event-producer", "finance"],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": ["mask_phone", "mask_email"],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier such as AB4001"
+          }
+        },
+        "required": ["eid"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_live_voting_status",
+      "description": "Return current voting status for an event and optional round.",
+      "risk_level": "low",
+      "allowed_roles": ["ops", "event-producer"],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": ["mask_phone", "mask_email"],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          },
+          "round": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": ["eid"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_auction_status",
+      "description": "Return current auction status for an event.",
+      "risk_level": "low",
+      "allowed_roles": ["ops", "event-producer", "finance"],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": ["mask_phone", "mask_email"],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": ["eid"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_payment_summary",
+      "description": "Return aggregated payment summary for an event.",
+      "risk_level": "medium",
+      "allowed_roles": ["finance", "ops"],
+      "requires_confirmation": false,
+      "max_calls_per_request": 1,
+      "redaction_rules": ["mask_phone", "mask_email", "mask_card_data"],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": ["eid"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "process_artist_payment",
+      "description": "Process an artist payment request for a specific event and artist profile.",
+      "risk_level": "high",
+      "allowed_roles": ["finance"],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": ["mask_phone", "mask_email", "mask_card_data"],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          },
+          "artist_profile_id": {
+            "type": "string",
+            "description": "UUID of artist profile"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.01
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": ["eid", "artist_profile_id", "amount", "currency"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

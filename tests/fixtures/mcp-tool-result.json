@@ -1,0 +1,13 @@
+{
+  "tool": "get_event_details",
+  "ok": true,
+  "result": {
+    "eid": "AB4001",
+    "name": "Art Battle Seattle",
+    "event_start_datetime": "2026-03-14T19:00:00Z",
+    "currency": "USD"
+  },
+  "meta": {
+    "duration_ms": 182
+  }
+}

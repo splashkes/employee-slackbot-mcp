@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: artbattle-employee-ai
+
+resources:
+  - namespace.yaml
+  - serviceaccounts.yaml
+  - slackbot-deployment.yaml
+  - mcp-gateway-deployment.yaml
+  - slackbot-service.yaml
+  - mcp-gateway-service.yaml
+  - networkpolicy.yaml
+
+configMapGenerator:
+  - name: allowed-tools-config
+    files:
+      - allowed-tools.json=../../../config/allowed-tools.json
+
+generatorOptions:
+  disableNameSuffixHash: true
