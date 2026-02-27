@@ -1,0 +1,18 @@
+{
+  "name": "employee-slackbot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Slack bot that routes employee requests to an allowlisted set of MCP tools through OpenAI",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/mcpGateway.js && node --check src/openaiRouter.js && node --check src/policy.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "@slack/bolt": "^4.4.0",
+    "dotenv": "^16.6.1",
+    "openai": "^4.104.0"
+  }
+}
