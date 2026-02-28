@@ -1,21 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: artbattle-employee-ai
-
 resources:
-  - namespace.yaml
-  - serviceaccounts.yaml
-  - slackbot-deployment.yaml
-  - mcp-gateway-deployment.yaml
-  - slackbot-service.yaml
-  - mcp-gateway-service.yaml
+  - namespaces.yaml
+  - services.yaml
+  - orchestration-api-deployment.yaml
+  - orchestration-supervisor-deployment.yaml
+  - execution-runners-deployments.yaml
   - networkpolicy.yaml
 
 configMapGenerator:
-  - name: allowed-tools-config
+  - name: execution-capability-catalog
     files:
-      - allowed-tools.json=../../../config/allowed-tools.json
+      - execution-capability-catalog.json=execution-capability-catalog.json
 
 generatorOptions:
   disableNameSuffixHash: true

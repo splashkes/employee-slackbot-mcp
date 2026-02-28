@@ -1,0 +1,88 @@
+{
+  "version": "2.0.0",
+  "updated_at": "2026-02-28T00:00:00Z",
+  "source_reference": "/Users/splash/vote26-fresh/AB_SKILL_AREAS_REFERENCE.md",
+  "architecture": {
+    "orchestration_plane": "Slack + planning + policy + workflow state",
+    "execution_plane": "Isolated async runner pools with domain-scoped credentials"
+  },
+  "coverage": {
+    "total_skill_areas": 50,
+    "covered_skill_areas": 43,
+    "coverage_percent": 86,
+    "covered_skill_ids": [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+      11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      21, 22, 23, 24, 25, 26, 28, 29, 30, 31,
+      32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+      42, 43, 50
+    ],
+    "deferred_skill_ids": [27, 44, 45, 46, 47, 48, 49]
+  },
+  "execution_domains": [
+    {
+      "domain": "data-read-runner",
+      "description": "Read-heavy event, artist, bidding, voting, and diagnostics tasks",
+      "skills": [1, 2, 3, 4, 5, 17, 19, 20, 22, 23, 24, 25, 26, 50],
+      "default_mode": "hybrid",
+      "primary_tools": ["psql", "curl", "jq"],
+      "auth_scope": ["SUPABASE_DB_URL_READONLY", "SUPABASE_ANON_KEY"]
+    },
+    {
+      "domain": "profile-integrity-runner",
+      "description": "Artist/profile edits, reconciliations, and event configuration workflows",
+      "skills": [6, 7, 8, 9, 10, 18, 21],
+      "default_mode": "sync",
+      "primary_tools": ["psql", "supabase"],
+      "auth_scope": ["SUPABASE_SERVICE_ROLE_KEY"]
+    },
+    {
+      "domain": "payments-runner",
+      "description": "Payment investigation and payout lifecycle actions",
+      "skills": [11, 12, 13, 14, 15, 16],
+      "default_mode": "async",
+      "primary_tools": ["psql", "stripe", "supabase"],
+      "auth_scope": ["SUPABASE_SERVICE_ROLE_KEY", "STRIPE_KEYS"]
+    },
+    {
+      "domain": "growth-marketing-runner",
+      "description": "Eventbrite, ads, SMS, Slack, and email orchestration",
+      "skills": [28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38],
+      "default_mode": "async",
+      "primary_tools": ["curl", "jq", "twilio", "aws"],
+      "auth_scope": ["EVENTBRITE_ACCESS_TOKEN", "META_ACCESS_TOKEN", "SMS_KEYS", "SES_KEYS"]
+    },
+    {
+      "domain": "platform-db-edge-runner",
+      "description": "Edge function and database lifecycle operations",
+      "skills": [39, 40, 41, 42, 43],
+      "default_mode": "sync",
+      "primary_tools": ["supabase", "psql"],
+      "auth_scope": ["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_URL_ADMIN"]
+    }
+  ],
+  "async_agent_contract": {
+    "queue_backend": "redis-streams-or-equivalent",
+    "event_topics": [
+      "workflow.created",
+      "task.dispatched",
+      "task.started",
+      "task.heartbeat",
+      "artifact.created",
+      "task.completed",
+      "task.failed",
+      "workflow.completed"
+    ],
+    "required_artifact_fields": [
+      "workflow_id",
+      "task_id",
+      "skill_id",
+      "runner_domain",
+      "result_summary",
+      "result_payload_ref",
+      "confidence",
+      "started_at",
+      "finished_at"
+    ]
+  }
+}

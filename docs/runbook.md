@@ -1,104 +1,76 @@
-# Employee AI Runbook
+# Orchestration + Execution Runbook
 
-Last Updated: 2026-02-27
+Last Updated: 2026-02-28
 Owner: Platform Engineering
 
 ## 1. Services
 
-1. `slackbot` (port `3000`)
-2. `mcp-gateway` (port `8081`)
+### Orchestration Plane
+
+1. `orchestration-api` (port `3000`)
+2. `orchestration-supervisor` (port `8080`)
+
+### Execution Plane
+
+1. `runner-data-read`
+2. `runner-profile-integrity`
+3. `runner-payments`
+4. `runner-growth-marketing`
+5. `runner-platform-db-edge`
 
 ## 2. Health Checks
 
-### Slackbot
+### Orchestration API
 
 ```bash
 curl -sS http://localhost:3000/healthz
 curl -sS http://localhost:3000/readyz
 ```
 
-### MCP Gateway
+### Orchestration Supervisor
 
 ```bash
-curl -sS http://localhost:8081/healthz
-curl -sS http://localhost:8081/readyz
+curl -sS http://localhost:8080/healthz
+curl -sS http://localhost:8080/readyz
 ```
 
-## 3. Local Startup
-
-### Slackbot
+## 3. Deployment
 
 ```bash
-cd services/slackbot
-cp .env.example .env
-npm install
-npm run start
+kubectl apply -f deploy/k8s/base/secrets.template.yaml
+kubectl apply -k deploy/k8s/base
 ```
 
-### MCP Gateway
+## 4. Common Incidents
 
-```bash
-cd services/mcp-gateway
-cp .env.example .env
-npm install
-npm run start
-```
-
-## 4. Verify MCP Connectivity
-
-```bash
-curl -sS \
-  -H "Authorization: Bearer $MCP_GATEWAY_AUTH_TOKEN" \
-  http://localhost:8081/v1/tools
-```
-
-## 5. Common Incidents
-
-### 5.1 Slackbot returns access denied
+### 4.1 Task backlog growth
 
 Checks:
-1. Confirm `SLACK_ALLOWED_TEAM_IDS`, `SLACK_ALLOWED_CHANNEL_IDS`, and `SLACK_ALLOWED_USER_IDS`.
-2. Confirm `RBAC_USER_MAP_JSON` includes the requester.
+1. Verify queue connectivity from orchestration and runner pods.
+2. Verify runner deployments are healthy and not CPU throttled.
+3. Check task concurrency env values per runner domain.
 
-### 5.2 Tool execution fails with `tool_not_allowed_for_role`
-
-Checks:
-1. Confirm `config/allowed-tools.json` includes the role for the tool.
-2. Confirm the user role mapping resolves to expected role.
-
-### 5.3 High-risk tool fails with `confirmation_required`
+### 4.2 Domain task failures
 
 Checks:
-1. Include explicit `CONFIRM` in Slack request text.
-2. Confirm `ENABLE_MUTATING_TOOLS=true` in the active environment if writes are intended.
+1. Confirm domain-specific secrets exist in `artbattle-execution` namespace.
+2. Validate egress access for required external APIs/DB endpoints.
+3. Verify skill-to-domain mapping in `execution-capability-catalog.json`.
 
-### 5.4 MCP auth failures
-
-Checks:
-1. Confirm both services use the same `MCP_GATEWAY_AUTH_TOKEN`.
-2. Confirm Authorization header value is `Bearer <token>`.
-
-### 5.5 MCP signature failures (`invalid_request_signature`)
+### 4.3 Missing workflow updates in orchestration
 
 Checks:
-1. Confirm both services use the same `MCP_REQUEST_SIGNING_SECRET`.
-2. Confirm gateway clock skew is within `MCP_REQUEST_SIGNATURE_MAX_AGE_SEC`.
+1. Confirm `task.*` and `artifact.*` events are emitted by runners.
+2. Confirm aggregation service can read event stream and artifact store.
 
-## 6. Secret Rotation
+## 5. Secret Rotation
 
-1. Update `employee-ai-secrets` values in secret manager or Kubernetes secret.
-2. Restart deployments:
+1. Rotate orchestration secrets in `artbattle-orchestration` namespace.
+2. Rotate runner-domain secrets in `artbattle-execution` namespace.
+3. Restart impacted deployments and verify workflow execution.
 
-```bash
-kubectl rollout restart deploy/slackbot -n artbattle-employee-ai
-kubectl rollout restart deploy/mcp-gateway -n artbattle-employee-ai
-```
+## 6. Emergency Read-Only Mode
 
-3. Validate health and a sample low-risk tool request.
-
-## 7. Emergency Read-Only Mode
-
-To disable high-risk writes quickly:
-1. Set `ENABLE_MUTATING_TOOLS=false`.
-2. Roll out restart for both services.
-3. Confirm high-risk tools are blocked.
+1. Disable mutating capabilities in orchestration policy.
+2. Scale down mutating runner pools (`runner-payments`, `runner-profile-integrity`).
+3. Keep `runner-data-read` active for diagnostics and status visibility.

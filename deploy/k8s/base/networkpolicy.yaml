@@ -2,6 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-all
+  namespace: artbattle-orchestration
 spec:
   podSelector: {}
   policyTypes:
@@ -11,28 +12,33 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: slackbot-policy
+  name: default-deny-all
+  namespace: artbattle-execution
 spec:
-  podSelector:
-    matchLabels:
-      app: slackbot
+  podSelector: {}
   policyTypes:
     - Ingress
     - Egress
-  ingress:
-    - from:
-        - namespaceSelector: {}
-      ports:
-        - protocol: TCP
-          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: orchestration-egress-policy
+  namespace: artbattle-orchestration
+spec:
+  podSelector:
+    matchLabels:
+      plane: orchestration
+  policyTypes:
+    - Egress
   egress:
     - to:
-        - podSelector:
+        - namespaceSelector:
             matchLabels:
-              app: mcp-gateway
+              kubernetes.io/metadata.name: artbattle-execution
       ports:
         - protocol: TCP
-          port: 8081
+          port: 6379
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -47,23 +53,22 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: mcp-gateway-policy
+  name: execution-egress-policy
+  namespace: artbattle-execution
 spec:
   podSelector:
     matchLabels:
-      app: mcp-gateway
+      plane: execution
   policyTypes:
-    - Ingress
     - Egress
-  ingress:
-    - from:
-        - podSelector:
+  egress:
+    - to:
+        - namespaceSelector:
             matchLabels:
-              app: slackbot
+              kubernetes.io/metadata.name: artbattle-orchestration
       ports:
         - protocol: TCP
-          port: 8081
-  egress:
+          port: 6379
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -74,3 +79,5 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+        - protocol: TCP
+          port: 5432

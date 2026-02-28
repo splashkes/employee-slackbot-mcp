@@ -1,41 +1,41 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: slackbot
+  name: orchestration-api
+  namespace: artbattle-orchestration
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: slackbot
+      app: orchestration-api
   template:
     metadata:
       labels:
-        app: slackbot
+        app: orchestration-api
+        plane: orchestration
     spec:
-      serviceAccountName: slackbot-sa
+      serviceAccountName: orchestration-api-sa
       containers:
-        - name: slackbot
-          image: ghcr.io/your-org/employee-slackbot:latest
+        - name: orchestration-api
+          image: ghcr.io/your-org/ab-orchestration-api:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
               name: http
           envFrom:
             - secretRef:
-                name: employee-ai-secrets
+                name: orchestration-secrets
           env:
             - name: NODE_ENV
               value: production
             - name: PORT
               value: "3000"
-            - name: MCP_GATEWAY_URL
-              value: http://mcp-gateway:8081
-            - name: ALLOWED_TOOLS_FILE
-              value: /app/config/allowed-tools.json
+            - name: CAPABILITY_CATALOG_FILE
+              value: /app/config/execution-capability-catalog.json
           volumeMounts:
-            - name: allowed-tools-volume
-              mountPath: /app/config/allowed-tools.json
-              subPath: allowed-tools.json
+            - name: capability-catalog-volume
+              mountPath: /app/config/execution-capability-catalog.json
+              subPath: execution-capability-catalog.json
               readOnly: true
           readinessProbe:
             httpGet:
@@ -49,14 +49,13 @@ spec:
               port: 3000
             initialDelaySeconds: 15
             periodSeconds: 20
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
       volumes:
-        - name: allowed-tools-volume
+        - name: capability-catalog-volume
           configMap:
-            name: allowed-tools-config
+            name: execution-capability-catalog
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orchestration-api-sa
+  namespace: artbattle-orchestration

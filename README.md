@@ -1,48 +1,28 @@
-# Employee Slackbot + MCP Gateway
+# Art Battle Orchestration + Execution Platform
 
-This repository contains:
-1. `services/slackbot` - Slack-facing orchestration service
-2. `services/mcp-gateway` - internal tool gateway with role/allowlist checks
-3. `config/allowed-tools.json` - tool allowlist policy
-4. `deploy/k8s` - Kubernetes base and environment overlays
+This repository uses one canonical architecture:
+1. `docs/architecture/orchestration-execution-plane.md` - system design.
+2. `deploy/k8s/base` - single Kubernetes topology (no overlays, no versioned alternates).
+3. `deploy/k8s/base/execution-capability-catalog.json` - skill coverage map for execution domains.
 
-## Quick Start
-
-### 1) MCP Gateway
+## Architecture
 
 ```bash
-cd services/mcp-gateway
-cp .env.example .env
-npm install
-npm run start
+cat docs/architecture/orchestration-execution-plane.md
+cat deploy/k8s/base/execution-capability-catalog.json
 ```
 
-### 2) Slackbot
+## Deploy (Canonical)
 
 ```bash
-cd services/slackbot
-cp .env.example .env
-npm install
-npm run start
-```
-
-## Root Commands
-
-```bash
-npm test
-npm run check
-```
-
-## Kubernetes
-
-Base manifests:
-
-```bash
+kubectl apply -f deploy/k8s/base/secrets.template.yaml
 kubectl apply -k deploy/k8s/base
 ```
 
-Dev overlay:
+## Validation
 
 ```bash
-kubectl apply -k deploy/k8s/overlays/dev
+kubectl kustomize deploy/k8s/base
+npm run check
+npm test
 ```

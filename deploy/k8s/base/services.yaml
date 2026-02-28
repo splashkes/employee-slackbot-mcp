@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestration-api
+  namespace: artbattle-orchestration
+spec:
+  selector:
+    app: orchestration-api
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestration-supervisor
+  namespace: artbattle-orchestration
+spec:
+  selector:
+    app: orchestration-supervisor
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,194 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runner-data-read-sa
+  namespace: artbattle-execution
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runner-profile-integrity-sa
+  namespace: artbattle-execution
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runner-payments-sa
+  namespace: artbattle-execution
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runner-growth-marketing-sa
+  namespace: artbattle-execution
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runner-platform-db-edge-sa
+  namespace: artbattle-execution
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-data-read
+  namespace: artbattle-execution
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: runner-data-read
+  template:
+    metadata:
+      labels:
+        app: runner-data-read
+        plane: execution
+        runner_domain: data-read
+    spec:
+      serviceAccountName: runner-data-read-sa
+      containers:
+        - name: runner
+          image: ghcr.io/your-org/ab-runner-data-read:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: runner-data-read-secrets
+          env:
+            - name: RUNNER_DOMAIN
+              value: data-read-runner
+            - name: TASK_QUEUE_BACKEND
+              value: redis-streams
+            - name: TASK_CONCURRENCY
+              value: "8"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-profile-integrity
+  namespace: artbattle-execution
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: runner-profile-integrity
+  template:
+    metadata:
+      labels:
+        app: runner-profile-integrity
+        plane: execution
+        runner_domain: profile-integrity
+    spec:
+      serviceAccountName: runner-profile-integrity-sa
+      containers:
+        - name: runner
+          image: ghcr.io/your-org/ab-runner-profile-integrity:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: runner-profile-integrity-secrets
+          env:
+            - name: RUNNER_DOMAIN
+              value: profile-integrity-runner
+            - name: TASK_QUEUE_BACKEND
+              value: redis-streams
+            - name: TASK_CONCURRENCY
+              value: "4"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-payments
+  namespace: artbattle-execution
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: runner-payments
+  template:
+    metadata:
+      labels:
+        app: runner-payments
+        plane: execution
+        runner_domain: payments
+    spec:
+      serviceAccountName: runner-payments-sa
+      containers:
+        - name: runner
+          image: ghcr.io/your-org/ab-runner-payments:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: runner-payments-secrets
+          env:
+            - name: RUNNER_DOMAIN
+              value: payments-runner
+            - name: TASK_QUEUE_BACKEND
+              value: redis-streams
+            - name: TASK_CONCURRENCY
+              value: "3"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-growth-marketing
+  namespace: artbattle-execution
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: runner-growth-marketing
+  template:
+    metadata:
+      labels:
+        app: runner-growth-marketing
+        plane: execution
+        runner_domain: growth-marketing
+    spec:
+      serviceAccountName: runner-growth-marketing-sa
+      containers:
+        - name: runner
+          image: ghcr.io/your-org/ab-runner-growth-marketing:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: runner-growth-marketing-secrets
+          env:
+            - name: RUNNER_DOMAIN
+              value: growth-marketing-runner
+            - name: TASK_QUEUE_BACKEND
+              value: redis-streams
+            - name: TASK_CONCURRENCY
+              value: "5"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-platform-db-edge
+  namespace: artbattle-execution
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: runner-platform-db-edge
+  template:
+    metadata:
+      labels:
+        app: runner-platform-db-edge
+        plane: execution
+        runner_domain: platform-db-edge
+    spec:
+      serviceAccountName: runner-platform-db-edge-sa
+      containers:
+        - name: runner
+          image: ghcr.io/your-org/ab-runner-platform-db-edge:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: runner-platform-db-edge-secrets
+          env:
+            - name: RUNNER_DOMAIN
+              value: platform-db-edge-runner
+            - name: TASK_QUEUE_BACKEND
+              value: redis-streams
+            - name: TASK_CONCURRENCY
+              value: "3"
