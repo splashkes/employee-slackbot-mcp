@@ -15,10 +15,12 @@ spec:
         plane: orchestration
     spec:
       serviceAccountName: orchestration-supervisor-sa
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: orchestration-supervisor
-          image: REPLACE_ME:latest # TODO: set real image before deploy
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/splashkes/orchestration-supervisor:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http

@@ -46,10 +46,12 @@ spec:
         runner_domain: data-read
     spec:
       serviceAccountName: runner-data-read-sa
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: runner
-          image: REPLACE_ME:latest # TODO: set real image before deploy
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/splashkes/runner-data-read:latest
+          imagePullPolicy: Always
           envFrom:
             - secretRef:
                 name: runner-data-read-secrets
@@ -79,10 +81,12 @@ spec:
         runner_domain: profile-integrity
     spec:
       serviceAccountName: runner-profile-integrity-sa
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: runner
-          image: REPLACE_ME:latest # TODO: set real image before deploy
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/splashkes/runner-profile-integrity:latest
+          imagePullPolicy: Always
           envFrom:
             - secretRef:
                 name: runner-profile-integrity-secrets
@@ -112,10 +116,12 @@ spec:
         runner_domain: payments
     spec:
       serviceAccountName: runner-payments-sa
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: runner
-          image: REPLACE_ME:latest # TODO: set real image before deploy
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/splashkes/runner-payments:latest
+          imagePullPolicy: Always
           envFrom:
             - secretRef:
                 name: runner-payments-secrets
@@ -145,10 +151,12 @@ spec:
         runner_domain: growth-marketing
     spec:
       serviceAccountName: runner-growth-marketing-sa
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: runner
-          image: REPLACE_ME:latest # TODO: set real image before deploy
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/splashkes/runner-growth-marketing:latest
+          imagePullPolicy: Always
           envFrom:
             - secretRef:
                 name: runner-growth-marketing-secrets
@@ -178,10 +186,12 @@ spec:
         runner_domain: platform-db-edge
     spec:
       serviceAccountName: runner-platform-db-edge-sa
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: runner
-          image: REPLACE_ME:latest # TODO: set real image before deploy
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/splashkes/runner-platform-db-edge:latest
+          imagePullPolicy: Always
           envFrom:
             - secretRef:
                 name: runner-platform-db-edge-secrets

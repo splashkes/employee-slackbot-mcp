@@ -17,12 +17,21 @@ cat deploy/k8s/base/execution-capability-catalog.json
 ### Prerequisites
 - A running Kubernetes cluster with an ingress controller (e.g. nginx-ingress).
 - `kubectl` configured against the target cluster.
-- Container images built and pushed to your registry.
+- Container images built and pushed to `ghcr.io/splashkes/`.
 
 ### Steps
 
 1. **Edit secrets** — replace all placeholders in `secrets.template.yaml` with real values.
-2. **Set container images** — replace every `REPLACE_ME:latest` in the deployment manifests with your real image references.
+2. **Create image pull secret** — the cluster needs a `ghcr-pull` secret in each namespace to pull from GitHub Container Registry:
+   ```bash
+   for NS in artbattle-orchestration artbattle-execution; do
+     kubectl create secret docker-registry ghcr-pull \
+       --docker-server=ghcr.io \
+       --docker-username=splashkes \
+       --docker-password=<GITHUB_PAT> \
+       -n $NS
+   done
+   ```
 3. **Configure ingress** — in `ingress.yaml`, replace `REPLACE_ME_HOSTNAME` with the domain that Slack webhooks will hit. Configure TLS via cert-manager or a pre-provisioned secret. If using Slack Socket Mode, the ingress resource can be removed.
 4. **Apply:**
 

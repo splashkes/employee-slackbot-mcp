@@ -81,7 +81,7 @@ test("network policies allow Redis egress to shared namespace (not cross-plane)"
   );
 });
 
-test("all deployment images are explicitly marked as placeholders", () => {
+test("all deployment images reference ghcr.io/splashkes/", () => {
   const deployment_files = [
     "orchestration-api-deployment.yaml",
     "orchestration-supervisor-deployment.yaml",
@@ -94,8 +94,8 @@ test("all deployment images are explicitly marked as placeholders", () => {
     for (const image_ref of image_lines) {
       assert.match(
         image_ref,
-        /REPLACE_ME/,
-        `Image in ${file_name} is not marked as placeholder: ${image_ref}`
+        /^ghcr\.io\/splashkes\//,
+        `Image in ${file_name} does not reference ghcr.io/splashkes/: ${image_ref}`
       );
     }
   }

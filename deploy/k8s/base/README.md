@@ -18,9 +18,10 @@ kubectl apply -k deploy/k8s/base
 ## Before deploying
 
 1. Replace all placeholders in `secrets.template.yaml` with real values.
-2. Replace every `REPLACE_ME:latest` image reference in deployment manifests with real container images.
-3. In `ingress.yaml`, set `REPLACE_ME_HOSTNAME` to your domain and configure TLS. Omit this file if using Slack Socket Mode.
-4. Ensure a Redis instance is running in the `shared` namespace at `redis.shared.svc.cluster.local:6379`.
+2. Create a `ghcr-pull` image pull secret in both namespaces (see root README).
+3. Build and push container images to `ghcr.io/splashkes/`.
+4. In `ingress.yaml`, set `REPLACE_ME_HOSTNAME` to your domain and configure TLS. Omit this file if using Slack Socket Mode.
+5. Ensure a Redis instance is running in the `shared` namespace at `redis.shared.svc.cluster.local:6379`.
 
 ## Notes
 

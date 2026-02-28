@@ -123,21 +123,30 @@ The k8s manifests and secrets reference `redis://redis.shared.svc.cluster.local:
 
 ## 9. Container Registry and Image Push (Blocker)
 
-No CI/CD pipeline or container registry is configured. Images need to be built, tagged, and pushed somewhere that DigitalOcean k8s can pull from.
+Using GitHub Container Registry (ghcr.io) since the repo is on GitHub. Image refs are already set in the k8s manifests (`ghcr.io/splashkes/<name>:latest`).
 
 ### Tasks
 
-- [ ] **9a. Choose a container registry.** DigitalOcean Container Registry (DOCR) is the natural choice.
-- [ ] **9b. Create the registry** (e.g., `doctl registry create abcodex`).
-- [ ] **9c. Build and push images:**
+- [x] **9a. Image refs set in manifests** — all deployments point to `ghcr.io/splashkes/`.
+- [x] **9b. `imagePullSecrets` added** — all deployment specs reference a `ghcr-pull` secret.
+- [ ] **9c. Create the `ghcr-pull` secret in both namespaces:**
   ```
-  docker build -f services/slackbot/Dockerfile -t registry.digitalocean.com/abcodex/orchestration-api:v1 .
-  docker build -f services/mcp-gateway/Dockerfile -t registry.digitalocean.com/abcodex/mcp-gateway:v1 .
-  docker push registry.digitalocean.com/abcodex/orchestration-api:v1
-  docker push registry.digitalocean.com/abcodex/mcp-gateway:v1
+  for NS in artbattle-orchestration artbattle-execution; do
+    kubectl create secret docker-registry ghcr-pull \
+      --docker-server=ghcr.io \
+      --docker-username=splashkes \
+      --docker-password=<GITHUB_PAT_WITH_READ_PACKAGES> \
+      -n $NS
+  done
   ```
-- [ ] **9d. Replace `REPLACE_ME:latest`** in deployment manifests with the real image URIs.
-- [ ] **9e. Configure k8s cluster to pull from DOCR** (`doctl registry kubernetes-manifest | kubectl apply -f -`).
+- [ ] **9d. Build and push images** (after Dockerfiles are fixed in item 1):
+  ```
+  docker build -f services/slackbot/Dockerfile -t ghcr.io/splashkes/orchestration-api:v1 .
+  docker build -f services/mcp-gateway/Dockerfile -t ghcr.io/splashkes/orchestration-supervisor:v1 .
+  docker push ghcr.io/splashkes/orchestration-api:v1
+  docker push ghcr.io/splashkes/orchestration-supervisor:v1
+  ```
+- [ ] **9e. Optional: add a GitHub Actions workflow** to build and push on merge to main.
 
 ---
 
