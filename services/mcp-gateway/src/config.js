@@ -43,6 +43,11 @@ const service_config = {
   },
   gateway: {
     auth_token: process.env.MCP_GATEWAY_AUTH_TOKEN || "",
+    request_signing_secret: process.env.MCP_REQUEST_SIGNING_SECRET || "",
+    request_signature_max_age_sec: parse_number(
+      process.env.MCP_REQUEST_SIGNATURE_MAX_AGE_SEC,
+      300
+    ),
     allowed_tools_file: process.env.ALLOWED_TOOLS_FILE || default_allowed_tools_file,
     enable_mutating_tools: parse_boolean(process.env.ENABLE_MUTATING_TOOLS, false)
   }
@@ -53,6 +58,10 @@ function assert_required_config() {
 
   if (!service_config.gateway.auth_token) {
     missing_fields.push("MCP_GATEWAY_AUTH_TOKEN");
+  }
+
+  if (!service_config.gateway.request_signing_secret) {
+    missing_fields.push("MCP_REQUEST_SIGNING_SECRET");
   }
 
   if (missing_fields.length > 0) {

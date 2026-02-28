@@ -1,4 +1,5 @@
 import http from "node:http";
+import crypto from "node:crypto";
 import { URL } from "node:url";
 import { service_config, assert_required_config } from "./config.js";
 import { Logger } from "./logger.js";
@@ -6,7 +7,8 @@ import {
   execute_tool_by_name,
   get_tool_definition_by_name,
   is_tool_allowed_for_role,
-  load_allowed_tools_manifest
+  load_allowed_tools_manifest,
+  validate_tool_arguments
 } from "./tools.js";
 
 const logger = new Logger(service_config.app.log_level);
@@ -48,14 +50,117 @@ async function parse_json_body(request, max_body_bytes) {
 
   const body_text = Buffer.concat(chunks).toString("utf8");
   if (!body_text) {
-    return {};
+    return {
+      body_payload: {},
+      body_text: ""
+    };
   }
 
   try {
-    return JSON.parse(body_text);
+    return {
+      body_payload: JSON.parse(body_text),
+      body_text
+    };
   } catch (_error) {
     throw new Error("invalid_json_body");
   }
+}
+
+function hash_arguments_payload(arguments_payload) {
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(arguments_payload || {}))
+    .digest("hex");
+}
+
+function build_signature_payload({ timestamp_sec, method_name, path_name, body_text }) {
+  return [String(timestamp_sec), method_name.toUpperCase(), path_name, body_text].join("\n");
+}
+
+function compare_hex_signatures(expected_signature, actual_signature) {
+  if (
+    typeof expected_signature !== "string" ||
+    typeof actual_signature !== "string" ||
+    expected_signature.length !== actual_signature.length
+  ) {
+    return false;
+  }
+
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expected_signature, "hex"),
+      Buffer.from(actual_signature, "hex")
+    );
+  } catch (_error) {
+    return false;
+  }
+}
+
+function validate_request_signature({ request, request_url, request_body_text }) {
+  const timestamp_header = request.headers["x-mcp-timestamp"];
+  const signature_header = request.headers["x-mcp-signature"];
+  const signature_version = request.headers["x-mcp-signature-version"];
+
+  if (
+    typeof timestamp_header !== "string" ||
+    typeof signature_header !== "string" ||
+    signature_header.length !== 64
+  ) {
+    return {
+      valid: false,
+      reason: "missing_or_invalid_signature_headers"
+    };
+  }
+
+  if (signature_version && signature_version !== "v1") {
+    return {
+      valid: false,
+      reason: "unsupported_signature_version"
+    };
+  }
+
+  const timestamp_sec = Number(timestamp_header);
+
+  if (!Number.isInteger(timestamp_sec)) {
+    return {
+      valid: false,
+      reason: "invalid_signature_timestamp"
+    };
+  }
+
+  const now_sec = Math.floor(Date.now() / 1000);
+  const age_sec = Math.abs(now_sec - timestamp_sec);
+
+  if (age_sec > service_config.gateway.request_signature_max_age_sec) {
+    return {
+      valid: false,
+      reason: "signature_expired"
+    };
+  }
+
+  const expected_signature = crypto
+    .createHmac("sha256", service_config.gateway.request_signing_secret)
+    .update(
+      build_signature_payload({
+        timestamp_sec,
+        method_name: request.method || "POST",
+        path_name: request_url.pathname,
+        body_text: request_body_text
+      })
+    )
+    .digest("hex");
+
+  if (!compare_hex_signatures(expected_signature, signature_header)) {
+    return {
+      valid: false,
+      reason: "invalid_signature"
+    };
+  }
+
+  return {
+    valid: true,
+    reason: "ok"
+  };
 }
 
 function get_path_segments(url_pathname) {
@@ -114,10 +219,30 @@ async function start_service() {
       const tool_name = decodeURIComponent(path_segments[2]);
 
       try {
-        const body_payload = await parse_json_body(
+        const parsed_request = await parse_json_body(
           request,
           service_config.app.request_max_body_bytes
         );
+        const signature_result = validate_request_signature({
+          request,
+          request_url,
+          request_body_text: parsed_request.body_text
+        });
+
+        if (!signature_result.valid) {
+          logger.warn("tool_request_signature_denied", {
+            tool_name,
+            reason: signature_result.reason
+          });
+
+          send_json(response, 401, {
+            ok: false,
+            error: "invalid_request_signature"
+          });
+          return;
+        }
+
+        const body_payload = parsed_request.body_payload;
 
         const arguments_payload = body_payload.arguments || {};
         const request_context = body_payload.request_context || {};
@@ -137,6 +262,16 @@ async function start_service() {
           send_json(response, 400, {
             ok: false,
             error: "missing_role"
+          });
+          return;
+        }
+
+        const validation_result = validate_tool_arguments(tool_definition, arguments_payload);
+        if (!validation_result.valid) {
+          send_json(response, 400, {
+            ok: false,
+            error: "invalid_arguments",
+            details: validation_result.errors
           });
           return;
         }
@@ -172,7 +307,10 @@ async function start_service() {
         logger.info("tool_executed", {
           tool_name,
           role_name,
-          request_context
+          requester_user_id: request_context.user_id || null,
+          requester_team_id: request_context.team_id || null,
+          requester_channel_id: request_context.channel_id || null,
+          arguments_hash: hash_arguments_payload(arguments_payload)
         });
 
         send_json(response, 200, {
@@ -188,9 +326,25 @@ async function start_service() {
           stack: error?.stack
         });
 
+        if (error?.message === "request_body_too_large") {
+          send_json(response, 413, {
+            ok: false,
+            error: "request_body_too_large"
+          });
+          return;
+        }
+
+        if (error?.message === "invalid_json_body") {
+          send_json(response, 400, {
+            ok: false,
+            error: "invalid_json_body"
+          });
+          return;
+        }
+
         send_json(response, 500, {
           ok: false,
-          error: error?.message || "internal_error"
+          error: "internal_error"
         });
         return;
       }

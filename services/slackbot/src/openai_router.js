@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import crypto from "node:crypto";
 
 function create_openai_client(api_key) {
   return new OpenAI({ apiKey: api_key });
@@ -60,6 +61,19 @@ function extract_text_from_message(message_content) {
   return "";
 }
 
+function summarize_arguments_payload(arguments_payload) {
+  const normalized_payload =
+    arguments_payload && typeof arguments_payload === "object" ? arguments_payload : {};
+
+  return {
+    arguments_hash: crypto
+      .createHash("sha256")
+      .update(JSON.stringify(normalized_payload))
+      .digest("hex"),
+    argument_keys: Object.keys(normalized_payload).sort()
+  };
+}
+
 async function run_openai_tool_routing({
   openai_client,
   model_name,
@@ -119,7 +133,7 @@ async function run_openai_tool_routing({
 
     logger.info("executing_tool_call", {
       tool_name,
-      arguments_payload
+      ...summarize_arguments_payload(arguments_payload)
     });
 
     const tool_result = await tool_executor({
@@ -127,9 +141,11 @@ async function run_openai_tool_routing({
       arguments_payload
     });
 
+    const argument_summary = summarize_arguments_payload(arguments_payload);
+
     executed_tool_calls.push({
       tool_name,
-      arguments_payload
+      ...argument_summary
     });
 
     tool_result_messages.push({

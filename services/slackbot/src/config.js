@@ -84,6 +84,7 @@ const service_config = {
   mcp: {
     gateway_url: process.env.MCP_GATEWAY_URL || "http://127.0.0.1:8081",
     gateway_auth_token: process.env.MCP_GATEWAY_AUTH_TOKEN || "",
+    request_signing_secret: process.env.MCP_REQUEST_SIGNING_SECRET || "",
     timeout_ms: parse_number(process.env.MCP_TIMEOUT_MS, 20000),
     max_tool_calls_per_request: parse_number(process.env.MCP_MAX_TOOL_CALLS_PER_REQUEST, 4)
   },
@@ -140,6 +141,10 @@ function assert_required_config() {
 
   if (!service_config.mcp.gateway_auth_token) {
     missing_fields.push("MCP_GATEWAY_AUTH_TOKEN");
+  }
+
+  if (!service_config.mcp.request_signing_secret) {
+    missing_fields.push("MCP_REQUEST_SIGNING_SECRET");
   }
 
   if (missing_fields.length > 0) {

@@ -12,7 +12,7 @@ This repository contains:
 
 ```bash
 cd services/mcp-gateway
-cp ../../.env.example .env
+cp .env.example .env
 npm install
 npm run start
 ```
@@ -21,7 +21,7 @@ npm run start
 
 ```bash
 cd services/slackbot
-cp ../../.env.example .env
+cp .env.example .env
 npm install
 npm run start
 ```

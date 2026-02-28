@@ -98,21 +98,15 @@ class FixedWindowRateLimiter {
   }
 }
 
-function redact_text(raw_text) {
-  if (!raw_text) {
-    return "";
-  }
-
-  let redacted_text = String(raw_text);
-
-  // Mask common email patterns.
-  redacted_text = redacted_text.replace(
+function apply_email_redaction(input_text) {
+  return input_text.replace(
     /([a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]*@([a-zA-Z0-9.-]+\.[A-Za-z]{2,})/g,
     "$1***@$2"
   );
+}
 
-  // Mask phone-like sequences while preserving the final 2 digits.
-  redacted_text = redacted_text.replace(/\+?\d[\d\s()-]{7,}\d/g, (match_text) => {
+function apply_phone_redaction(input_text) {
+  return input_text.replace(/\+?\d[\d\s()-]{7,}\d/g, (match_text) => {
     const digits_only = match_text.replace(/\D/g, "");
     if (digits_only.length < 7) {
       return match_text;
@@ -121,6 +115,49 @@ function redact_text(raw_text) {
     const visible_suffix = digits_only.slice(-2);
     return `***${visible_suffix}`;
   });
+}
+
+function apply_card_redaction(input_text) {
+  return input_text.replace(/\b(?:\d[ -]*){13,19}\b/g, (match_text) => {
+    const digits_only = match_text.replace(/\D/g, "");
+
+    if (digits_only.length < 13 || digits_only.length > 19) {
+      return match_text;
+    }
+
+    const visible_suffix = digits_only.slice(-4);
+    return `**** **** **** ${visible_suffix}`;
+  });
+}
+
+const redaction_rule_map = {
+  mask_email: apply_email_redaction,
+  mask_phone: apply_phone_redaction,
+  mask_card_data: apply_card_redaction
+};
+
+function redact_text(raw_text, redaction_rules = []) {
+  if (!raw_text) {
+    return "";
+  }
+
+  const default_rules = ["mask_email", "mask_phone"];
+  const rules_to_apply =
+    Array.isArray(redaction_rules) && redaction_rules.length > 0
+      ? redaction_rules
+      : default_rules;
+
+  let redacted_text = String(raw_text);
+
+  for (const rule_name of rules_to_apply) {
+    const redaction_function = redaction_rule_map[rule_name];
+
+    if (!redaction_function) {
+      continue;
+    }
+
+    redacted_text = redaction_function(redacted_text);
+  }
 
   return redacted_text;
 }

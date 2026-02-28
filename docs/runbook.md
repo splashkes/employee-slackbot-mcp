@@ -30,6 +30,7 @@ curl -sS http://localhost:8081/readyz
 
 ```bash
 cd services/slackbot
+cp .env.example .env
 npm install
 npm run start
 ```
@@ -38,6 +39,7 @@ npm run start
 
 ```bash
 cd services/mcp-gateway
+cp .env.example .env
 npm install
 npm run start
 ```
@@ -75,6 +77,12 @@ Checks:
 Checks:
 1. Confirm both services use the same `MCP_GATEWAY_AUTH_TOKEN`.
 2. Confirm Authorization header value is `Bearer <token>`.
+
+### 5.5 MCP signature failures (`invalid_request_signature`)
+
+Checks:
+1. Confirm both services use the same `MCP_REQUEST_SIGNING_SECRET`.
+2. Confirm gateway clock skew is within `MCP_REQUEST_SIGNATURE_MAX_AGE_SEC`.
 
 ## 6. Secret Rotation
 

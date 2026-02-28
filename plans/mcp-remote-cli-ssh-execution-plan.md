@@ -251,7 +251,7 @@ This section is intended for the next engineer/agent to continue work without re
 ## 16.1 Current Repository State
 
 Repo root for this initiative:
-- `/Users/splash/Documents/ABCodex/vote26/employee-slackbot`
+- `/Users/splash/Documents/ABCodex/employee-slackbot`
 
 Current implemented baseline:
 1. Slackbot service scaffold exists:
@@ -358,4 +358,3 @@ kubectl kustomize deploy/k8s/overlays/dev
 2. Security controls (host pinning, RBAC, confirmation, logging) are demonstrably enforced.
 3. Tests cover sanitizer, policy gates, timeout behavior, and deny paths.
 4. Runbook updated with rotation, incident, and rollback procedures.
-

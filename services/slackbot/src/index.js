@@ -19,6 +19,34 @@ const role_cache_map = new Map();
 const user_rate_limiter = new FixedWindowRateLimiter();
 const channel_rate_limiter = new FixedWindowRateLimiter();
 
+function create_error_id() {
+  return `err_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function build_safe_error_message(error_id, error_message) {
+  const normalized_error = String(error_message || "").toLowerCase();
+
+  if (
+    normalized_error.includes("requires explicit confirmation") ||
+    normalized_error.includes("confirmation_required")
+  ) {
+    return "This action requires explicit confirmation. Add CONFIRM to your request and retry.";
+  }
+
+  if (
+    normalized_error.includes("tool_not_allowed_for_role") ||
+    normalized_error.includes("is not allowed to execute")
+  ) {
+    return "Your role is not permitted to run one of the requested tools.";
+  }
+
+  if (normalized_error.includes("invalid_arguments")) {
+    return "The tool request was rejected because one or more arguments were invalid.";
+  }
+
+  return `Request failed due to an internal error. Reference ID: ${error_id}.`;
+}
+
 function remove_bot_mentions(raw_text) {
   return String(raw_text || "").replace(/<@[^>]+>/g, "").trim();
 }
@@ -109,6 +137,23 @@ function write_audit_event(event_name, metadata) {
   });
 }
 
+function get_response_redaction_rules(allowed_tools_manifest, executed_tool_calls) {
+  const collected_rules = new Set();
+
+  for (const executed_call of executed_tool_calls) {
+    const tool_definition = get_tool_definition_by_name(
+      allowed_tools_manifest,
+      executed_call.tool_name
+    );
+
+    for (const rule_name of tool_definition?.redaction_rules || []) {
+      collected_rules.add(rule_name);
+    }
+  }
+
+  return [...collected_rules];
+}
+
 async function handle_prompt({
   prompt_text,
   identity_context,
@@ -173,6 +218,7 @@ async function handle_prompt({
   }
 
   const started_at_ms = Date.now();
+  const tool_call_counts = new Map();
 
   const routing_result = await run_openai_tool_routing({
     openai_client,
@@ -188,6 +234,19 @@ async function handle_prompt({
       if (!tool_definition) {
         throw new Error(`Tool is not allowlisted: ${tool_name}`);
       }
+
+      const current_count = tool_call_counts.get(tool_name) || 0;
+      const next_count = current_count + 1;
+      const tool_max_calls =
+        Number(tool_definition.max_calls_per_request) > 0
+          ? tool_definition.max_calls_per_request
+          : service_config.mcp.max_tool_calls_per_request;
+
+      if (next_count > tool_max_calls) {
+        throw new Error(`Tool ${tool_name} exceeded max calls per request (${tool_max_calls})`);
+      }
+
+      tool_call_counts.set(tool_name, next_count);
 
       if (!(tool_definition.allowed_roles || []).includes(role_name)) {
         throw new Error(`Role ${role_name} is not allowed to execute ${tool_name}`);
@@ -214,6 +273,7 @@ async function handle_prompt({
       return await call_mcp_tool({
         gateway_url: service_config.mcp.gateway_url,
         gateway_auth_token: service_config.mcp.gateway_auth_token,
+        request_signing_secret: service_config.mcp.request_signing_secret,
         timeout_ms: service_config.mcp.timeout_ms,
         tool_name,
         arguments_payload,
@@ -231,7 +291,11 @@ async function handle_prompt({
     tools_executed: routing_result.executed_tool_calls.map((item) => item.tool_name)
   });
 
-  const redacted_text = redact_text(routing_result.response_text);
+  const response_redaction_rules = get_response_redaction_rules(
+    allowed_tools_manifest,
+    routing_result.executed_tool_calls
+  );
+  const redacted_text = redact_text(routing_result.response_text, response_redaction_rules);
   return truncate_text(redacted_text, service_config.limits.response_max_chars);
 }
 
@@ -283,12 +347,15 @@ async function start_service() {
 
       await respond(response_text);
     } catch (error) {
+      const error_id = create_error_id();
+
       logger.error("command_handler_failed", {
+        error_id,
         error_message: error?.message,
         stack: error?.stack
       });
 
-      await respond(`Request failed: ${error?.message || "unknown_error"}`);
+      await respond(build_safe_error_message(error_id, error?.message));
     }
   });
 
@@ -307,12 +374,15 @@ async function start_service() {
 
       await say(response_text);
     } catch (error) {
+      const error_id = create_error_id();
+
       logger.error("mention_handler_failed", {
+        error_id,
         error_message: error?.message,
         stack: error?.stack
       });
 
-      await say(`Request failed: ${error?.message || "unknown_error"}`);
+      await say(build_safe_error_message(error_id, error?.message));
     }
   });
 
