@@ -23,8 +23,7 @@ Responsibilities:
 
 Services:
 1. `orchestration-api` (request intake + sync endpoints).
-2. `orchestration-supervisor` (workflow planner/coordinator).
-3. `artifact-aggregator` (collects task outputs, applies redaction, composes response).
+2. `orchestration-supervisor` (workflow planner/coordinator + artifact aggregation).
 
 ### Execution Plane
 
@@ -83,7 +82,7 @@ Coverage target met now via capability catalog:
 2. Covered now: 43
 3. Coverage: 86%
 
-Catalog file: `/Users/splash/Documents/ABCodex/employee-slackbot/deploy/k8s/base/execution-capability-catalog.json`
+Catalog file: `deploy/k8s/base/execution-capability-catalog.json`
 
 ### Included Skill IDs by Runner Domain
 
@@ -109,6 +108,11 @@ Catalog file: `/Users/splash/Documents/ABCodex/employee-slackbot/deploy/k8s/base
 
 1. `artbattle-orchestration` (ingress, planner, policy, aggregation).
 2. `artbattle-execution` (runner deployments and job workers).
+3. `shared` (Redis and other shared infrastructure).
+
+### Ingress
+
+External traffic (Slack webhooks, API clients) enters via an Ingress resource that routes HTTPS to `orchestration-api` on port 3000. Socket Mode is supported as an alternative that requires no inbound ingress.
 
 ### Core Deployments
 
@@ -128,17 +132,24 @@ Catalog file: `/Users/splash/Documents/ABCodex/employee-slackbot/deploy/k8s/base
 
 ### Network Boundaries
 
-1. Orchestration can publish tasks and read artifacts/events.
-2. Execution runners cannot call Slack directly.
-3. Runner egress is domain-specific allowlist only.
+1. Default deny-all ingress+egress on both orchestration and execution namespaces.
+2. `orchestration-api` allows inbound on port 3000 (external/ingress controller).
+3. `orchestration-supervisor` allows inbound on port 8080 (intra-namespace only).
+4. Both planes allow egress to Redis in the `shared` namespace on port 6379.
+5. Orchestration allows outbound HTTPS (443) and DNS (53).
+6. Execution allows outbound HTTPS (443), DNS (53), and Postgres (5432).
+7. Execution runners cannot call Slack directly.
 
 ## 6) Rollout Order
 
-1. Deploy orchestration namespace and services.
-2. Deploy execution namespace and runner pools.
-3. Enable queue/event contract and artifact aggregation.
-4. Activate covered skill domains by policy.
-5. Track deferred 7-skill rebuilds as explicit backlog items.
+1. Provision Redis in the `shared` namespace.
+2. Replace placeholder secrets and container images in manifests.
+3. Configure Ingress hostname and TLS (or enable Socket Mode).
+4. Deploy orchestration namespace and services.
+5. Deploy execution namespace and runner pools.
+6. Enable queue/event contract and artifact aggregation.
+7. Activate covered skill domains by policy.
+8. Track deferred 7-skill rebuilds as explicit backlog items.
 ## 7) Acceptance Criteria
 
 1. Orchestration plane remains lightweight and policy-focused.
