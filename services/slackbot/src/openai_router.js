@@ -116,7 +116,8 @@ async function run_openai_tool_routing({
     "  AB4003-1-2   Ploy Makaew               4   $1,190",
     "  ```",
     "• Format currency with $ and commas ($1,890.00 not 1890.00)",
-    "• Format dates/times in a human-readable way (Jan 15, 2025 at 3:14 PM, not 2025-01-15T15:14:15Z)",
+    "• TIMEZONE: Event datetimes in the database are stored in UTC. When the data includes a timezone_icann field (e.g. America/Toronto, America/New_York, Australia/Sydney), you MUST convert UTC times to that local timezone before displaying. Example: 2026-12-18T00:30:00Z with timezone America/Toronto = Dec 17, 2026 at 7:30 PM ET. Always show the timezone abbreviation (ET, PT, AEST, etc.).",
+    "• Format dates/times in a human-readable way (Jan 15, 2025 at 3:14 PM ET, not 2025-01-15T15:14:15Z)",
     "• Keep responses concise — Slack messages should be scannable, not walls of text."
   ].join("\n");
 

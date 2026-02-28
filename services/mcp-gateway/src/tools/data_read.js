@@ -8,6 +8,7 @@ async function lookup_event({ eid, city, limit }, sql) {
     const rows = await sql`
       SELECT
         e.id, e.eid, e.name, e.event_start_datetime, e.event_end_datetime,
+        e.timezone_icann,
         e.enabled, e.currency, e.show_in_app, e.event_level,
         e.city_id, c.name AS city_name, c.country_id,
         e.venue_id, v.name AS venue_name
@@ -26,6 +27,7 @@ async function lookup_event({ eid, city, limit }, sql) {
   const rows = await sql`
     SELECT
       e.id, e.eid, e.name, e.event_start_datetime, e.event_end_datetime,
+      e.timezone_icann,
       e.enabled, e.currency, e.show_in_app, e.event_level,
       e.eventbrite_id, e.meta_ads_budget, e.capacity,
       e.city_id, c.name AS city_name, c.country_id,
