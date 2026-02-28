@@ -155,14 +155,14 @@ function validate_tool_arguments(tool_definition, arguments_payload) {
   };
 }
 
-async function execute_tool_by_name(tool_name, arguments_payload, service_config, { sql, edge } = {}) {
+async function execute_tool_by_name(tool_name, arguments_payload, service_config, { sql, edge } = {}, request_context = {}) {
   const handler = tool_registry[tool_name];
 
   if (!handler) {
     throw new Error(`Unknown tool: ${tool_name}`);
   }
 
-  return handler(arguments_payload, sql, edge, service_config);
+  return handler(arguments_payload, sql, edge, service_config, request_context);
 }
 
 export {

@@ -191,10 +191,30 @@ Phase 5 — Observability (run SQL on Supabase)              ⚠️ MANUAL
 
 ---
 
+## Post-Launch Improvements (completed 2026-02-28)
+
+All deployed to DigitalOcean DOKS (`esbmcp` cluster, `artbattle-orchestration` namespace):
+
+- [x] Slack mrkdwn formatting (system prompt + post-processor)
+- [x] Multi-round tool chaining (up to 5 OpenAI API rounds)
+- [x] Typing indicator (hourglass reaction)
+- [x] Open viewer channels (any user gets read-only in specified channels)
+- [x] Interactive confirm/cancel buttons for non-low-risk tools
+- [x] Bot self-introspection tools (errors, sessions, tool stats)
+- [x] Token usage tracking and estimated cost per session
+- [x] Timezone awareness (UTC → event's local timezone)
+- [x] Thread-aware replies (bot threads under user's message)
+- [x] Thread context (follow-up @mentions in thread carry conversation history)
+- [x] UUID validation (prevents SQL crashes from hallucinated IDs)
+- [x] Bug report filing via the bot
+- [x] Payment balance using production formula (dynamic artist_auction_portion)
+- [x] Switched from ghcr.io to DigitalOcean Container Registry
+
 ## Out of Scope (tracked separately)
 
 - Execution runner pool code (5 runner services reserved for async agents).
 - Async agent / gatherer pattern and Redis Streams event bus.
-- CI/CD pipeline automation.
+- CI/CD pipeline automation (currently manual docker build/push/rollout).
 - Event creation tool (needs admin SPA validation matching).
 - Integration tests against real Supabase database.
+- GitHub Actions workflow for automated builds.

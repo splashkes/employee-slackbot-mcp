@@ -1,6 +1,15 @@
 // data_read domain — 15 read-only SQL tools
 // Skills: 1-5, 17-20, 22-24, 28-30
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function require_uuid(value, field_name) {
+  if (!value || !UUID_RE.test(value)) {
+    return { error: `${field_name} must be a valid UUID. Use lookup_artist_profile or lookup_person first to get the real ID.` };
+  }
+  return null;
+}
+
 async function lookup_event({ eid, city, limit }, sql) {
   // Search by city name if no eid provided
   if (!eid && city) {
@@ -90,6 +99,7 @@ async function lookup_artist_profile({ query, search_by }, sql) {
       ORDER BY ap.created_at DESC LIMIT 10
     `;
   } else if (field === "id") {
+    const id_err = require_uuid(query, "query (artist profile id)"); if (id_err) return id_err;
     rows = await sql`
       SELECT ap.id, ap.name, ap.country, ap.abhq_bio,
              (ap.superseded_by IS NULL) AS is_active,
@@ -101,6 +111,7 @@ async function lookup_artist_profile({ query, search_by }, sql) {
       LIMIT 1
     `;
   } else if (field === "person_id") {
+    const id_err = require_uuid(query, "query (person id)"); if (id_err) return id_err;
     rows = await sql`
       SELECT ap.id, ap.name, ap.country, ap.abhq_bio,
              (ap.superseded_by IS NULL) AS is_active,
@@ -119,6 +130,7 @@ async function lookup_artist_profile({ query, search_by }, sql) {
 }
 
 async function lookup_artwork_bids({ eid, artist_profile_id }, sql) {
+  if (artist_profile_id) { const err = require_uuid(artist_profile_id, "artist_profile_id"); if (err) return err; }
   let rows;
 
   if (artist_profile_id) {
@@ -309,6 +321,7 @@ async function get_event_summary({ eid }, sql) {
 }
 
 async function get_bid_history({ eid, art_id }, sql) {
+  if (art_id) { const err = require_uuid(art_id, "art_id"); if (err) return err; }
   let rows;
 
   if (art_id) {

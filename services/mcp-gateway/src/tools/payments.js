@@ -1,7 +1,17 @@
 // payments domain — 9 tools
 // Skills: 11-16
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function require_uuid(value, field_name) {
+  if (!value || !UUID_RE.test(value)) {
+    return { error: `${field_name} must be a valid UUID. Use lookup_artist_profile or lookup_person first to get the real ID.` };
+  }
+  return null;
+}
+
 async function get_artist_stripe_status({ artist_profile_id, eid }, sql) {
+  if (artist_profile_id) { const err = require_uuid(artist_profile_id, "artist_profile_id"); if (err) return err; }
   let rows;
 
   if (artist_profile_id) {
@@ -132,6 +142,7 @@ async function get_manual_payment_requests({ eid, status }, sql) {
 }
 
 async function get_artist_payment_ledger({ artist_profile_id, eid }, sql) {
+  if (artist_profile_id) { const err = require_uuid(artist_profile_id, "artist_profile_id"); if (err) return err; }
   let rows;
 
   if (artist_profile_id && eid) {
@@ -188,30 +199,107 @@ async function get_artist_payment_ledger({ artist_profile_id, eid }, sql) {
   return { payments: rows, count: rows.length, total_paid };
 }
 
-async function get_artists_owed({ eid }, sql) {
-  const rows = await sql`
-    SELECT a.artist_id,
-           ap.name AS artist_name,
-           e.eid, e.currency,
-           COALESCE(SUM(a.final_price), 0) AS total_sales,
-           COALESCE(SUM(CASE WHEN ap2.status IN ('paid', 'completed') THEN ap2.gross_amount ELSE 0 END), 0) AS total_paid,
-           COALESCE(SUM(a.final_price), 0) -
-             COALESCE(SUM(CASE WHEN ap2.status IN ('paid', 'completed') THEN ap2.gross_amount ELSE 0 END), 0) AS amount_owed
-    FROM art a
-    JOIN events e ON e.id = a.event_id
-    JOIN artist_profiles ap ON ap.id = a.artist_id
-    LEFT JOIN artist_payments ap2 ON ap2.art_id = a.id
-    WHERE e.eid = ${eid}
-      AND a.final_price IS NOT NULL AND a.final_price > 0
-    GROUP BY a.artist_id, ap.name, e.eid, e.currency
-    HAVING COALESCE(SUM(a.final_price), 0) -
-           COALESCE(SUM(CASE WHEN ap2.status IN ('paid', 'completed') THEN ap2.gross_amount ELSE 0 END), 0) > 0
-    ORDER BY amount_owed DESC
-  `;
+async function get_artists_owed({ eid, artist_profile_id }, sql) {
+  if (artist_profile_id) { const err = require_uuid(artist_profile_id, "artist_profile_id"); if (err) return err; }
 
-  const total_owed = rows.reduce((sum, r) => sum + Number(r.amount_owed || 0), 0);
+  const artist_filter = artist_profile_id ? sql`AND a.artist_id = ${artist_profile_id}::uuid` : sql``;
+  const eid_filter = eid ? sql`AND e.eid = ${eid}` : sql``;
 
-  return { artists_owed: rows, count: rows.length, total_owed };
+  // Credits and debits run concurrently — they are independent queries
+  const debit_filter = artist_profile_id
+    ? sql`WHERE ap2.artist_profile_id = ${artist_profile_id}::uuid AND ap2.status != 'cancelled'`
+    : sql`WHERE ap2.status != 'cancelled'`;
+
+  const [credits, debits] = await Promise.all([
+    sql`
+      SELECT a.artist_id,
+             ap.name AS artist_name,
+             e.currency,
+             SUM(COALESCE(a.final_price, a.current_bid, 0) * COALESCE(e.artist_auction_portion, 0.5)) AS total_credits
+      FROM art a
+      JOIN events e ON e.id = a.event_id
+      JOIN artist_profiles ap ON ap.id = a.artist_id
+      WHERE a.status = 'paid'
+        AND COALESCE(a.final_price, a.current_bid, 0) > 0
+        ${eid_filter} ${artist_filter}
+      GROUP BY a.artist_id, ap.name, e.currency
+    `,
+    sql`
+      SELECT ap2.artist_profile_id AS artist_id,
+             SUM(ap2.gross_amount) AS total_debits
+      FROM artist_payments ap2
+      ${debit_filter}
+      GROUP BY ap2.artist_profile_id
+    `
+  ]);
+
+  // Merge credits and debits per artist+currency
+  const debit_map = new Map();
+  for (const d of debits) debit_map.set(d.artist_id, Number(d.total_debits || 0));
+
+  const results = [];
+  // Group credits by artist
+  const by_artist = new Map();
+  for (const c of credits) {
+    if (!by_artist.has(c.artist_id)) {
+      by_artist.set(c.artist_id, { artist_name: c.artist_name, currencies: [] });
+    }
+    by_artist.get(c.artist_id).currencies.push({
+      currency: c.currency,
+      credits: Number(c.total_credits || 0)
+    });
+  }
+
+  for (const [artist_id, info] of by_artist) {
+    const total_credits = info.currencies.reduce((s, c) => s + c.credits, 0);
+    const total_debits = debit_map.get(artist_id) || 0;
+    const balance = Math.max(0, Math.round((total_credits - total_debits) * 100) / 100);
+    if (balance < 0.01) continue;
+
+    results.push({
+      artist_id,
+      artist_name: info.artist_name,
+      total_credits: Math.round(total_credits * 100) / 100,
+      total_debits: Math.round(total_debits * 100) / 100,
+      balance,
+      currency_breakdown: info.currencies
+    });
+  }
+
+  results.sort((a, b) => b.balance - a.balance);
+  const total_owed = results.reduce((sum, r) => sum + r.balance, 0);
+
+  // For large result sets, return a summary to avoid overwhelming the AI context
+  if (results.length > 25) {
+    // Group totals by currency using per-currency credits (not the merged balance)
+    const by_currency = {};
+    for (const r of results) {
+      for (const cb of r.currency_breakdown) {
+        const cur = cb.currency || "UNKNOWN";
+        if (!by_currency[cur]) by_currency[cur] = { currency: cur, total_credits: 0, artist_count: 0 };
+        by_currency[cur].total_credits += cb.credits;
+        by_currency[cur].artist_count++;
+      }
+    }
+
+    return {
+      count: results.length,
+      total_owed: Math.round(total_owed * 100) / 100,
+      currency_summary: Object.values(by_currency).map((c) => ({
+        currency: c.currency,
+        artist_count: c.artist_count,
+        total_credits: Math.round(c.total_credits * 100) / 100
+      })),
+      top_20: results.slice(0, 20).map((r) => ({
+        artist_name: r.artist_name,
+        balance: r.balance,
+        currency_breakdown: r.currency_breakdown
+      })),
+      note: `Showing top 20 of ${results.length} unpaid artists sorted by balance descending. Use eid filter or artist_profile_id to narrow results.`
+    };
+  }
+
+  return { artists_owed: results, count: results.length, total_owed: Math.round(total_owed * 100) / 100 };
 }
 
 async function get_payment_status_health({ eid }, sql) {
@@ -256,6 +344,7 @@ async function get_payment_status_health({ eid }, sql) {
 }
 
 async function get_payment_invitations({ eid, artist_profile_id }, sql) {
+  if (artist_profile_id) { const err = require_uuid(artist_profile_id, "artist_profile_id"); if (err) return err; }
   let rows;
 
   if (eid) {

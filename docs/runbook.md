@@ -7,8 +7,14 @@ Owner: Platform Engineering
 
 ### Orchestration Plane
 
-1. `orchestration-api` (slackbot, port `3000`) — Slack ingress, AI routing, session logging
-2. `orchestration-supervisor` (MCP gateway, port `8081`) — tool execution, audit logging
+| Deployment | Image | Service | Port | Role |
+|-----------|-------|---------|------|------|
+| `orchestration-api` | `orchestration-api:latest` | Slackbot | 3000 | Slack ingress, OpenAI routing, thread context, session logging |
+| `orchestration-supervisor` | `orchestration-supervisor:latest` | MCP Gateway | 8081 | Tool execution, RBAC, audit logging, DB queries |
+
+**Important naming:** The deployment names don't match what they run:
+- `orchestration-api` = **Slackbot** (built from `services/slackbot/Dockerfile`)
+- `orchestration-supervisor` = **MCP Gateway** (built from `services/mcp-gateway/Dockerfile`)
 
 ### Execution Plane (deferred — replicas: 0)
 
@@ -18,51 +24,206 @@ Owner: Platform Engineering
 4. `runner-growth-marketing`
 5. `runner-platform-db-edge`
 
-All 46 tools are served directly by the MCP gateway. Runners are reserved for future async agent work.
+All 48 tools are served directly by the MCP gateway. Runners are reserved for future async agent work.
 
-## 2. Health Checks
+## 2. Infrastructure
 
-### Orchestration API (Slackbot)
+### DigitalOcean
+
+- **Cluster:** `esbmcp` in `tor1` (Toronto), Kubernetes 1.34
+- **Registry:** `registry.digitalocean.com/esbmcp/` (free tier, 2-repo limit)
+- **Namespace:** `artbattle-orchestration`
+- **Node pool:** `esbmcp-default-pool`
+
+### Initial Setup (one-time)
 
 ```bash
-curl -sS http://localhost:3000/healthz
-curl -sS http://localhost:3000/readyz   # checks OpenAI key + gateway reachability
+# Install doctl
+brew install doctl
+
+# Authenticate
+doctl auth init
+
+# Save kubeconfig
+doctl kubernetes cluster kubeconfig save esbmcp
+
+# Login to container registry
+doctl registry login
+
+# Verify
+kubectl get nodes
+doctl registry repo list-v2
 ```
 
-### Orchestration Supervisor (MCP Gateway)
+### Registry Management
+
+The free tier has a **2-repository limit**. Both repos are used:
+- `orchestration-api` — Slackbot image
+- `orchestration-supervisor` — MCP Gateway image
 
 ```bash
+# List repos and tags
+doctl registry repo list-v2
+
+# Clean up old manifests (run periodically to free space)
+doctl registry garbage-collection start --force
+
+# Check GC status
+doctl registry garbage-collection get-active
+```
+
+## 3. Build & Deploy
+
+### Full Deploy (both services)
+
+```bash
+# From repo root — MUST use --platform linux/amd64 (Apple Silicon → DO droplets)
+
+# Build
+docker build --platform linux/amd64 --no-cache \
+  -t registry.digitalocean.com/esbmcp/orchestration-api:latest \
+  -f services/slackbot/Dockerfile .
+
+docker build --platform linux/amd64 --no-cache \
+  -t registry.digitalocean.com/esbmcp/orchestration-supervisor:latest \
+  -f services/mcp-gateway/Dockerfile .
+
+# Push
+docker push registry.digitalocean.com/esbmcp/orchestration-api:latest
+docker push registry.digitalocean.com/esbmcp/orchestration-supervisor:latest
+
+# Roll out
+kubectl rollout restart deployment/orchestration-api deployment/orchestration-supervisor \
+  -n artbattle-orchestration
+
+# Wait for completion
+kubectl rollout status deployment/orchestration-api deployment/orchestration-supervisor \
+  -n artbattle-orchestration --timeout=90s
+```
+
+### Deploy Slackbot Only
+
+```bash
+docker build --platform linux/amd64 --no-cache \
+  -t registry.digitalocean.com/esbmcp/orchestration-api:latest \
+  -f services/slackbot/Dockerfile .
+docker push registry.digitalocean.com/esbmcp/orchestration-api:latest
+kubectl rollout restart deployment/orchestration-api -n artbattle-orchestration
+kubectl rollout status deployment/orchestration-api -n artbattle-orchestration --timeout=60s
+```
+
+### Deploy Gateway Only
+
+```bash
+docker build --platform linux/amd64 --no-cache \
+  -t registry.digitalocean.com/esbmcp/orchestration-supervisor:latest \
+  -f services/mcp-gateway/Dockerfile .
+docker push registry.digitalocean.com/esbmcp/orchestration-supervisor:latest
+kubectl rollout restart deployment/orchestration-supervisor -n artbattle-orchestration
+kubectl rollout status deployment/orchestration-supervisor -n artbattle-orchestration --timeout=60s
+```
+
+### Verify After Deploy
+
+```bash
+# Check pods are running
+kubectl get pods -n artbattle-orchestration
+
+# Slackbot should log: slackbot_started, socket_mode: true
+kubectl logs deployment/orchestration-api -n artbattle-orchestration --tail=5
+
+# Gateway should log: mcp_gateway_started, has_db: true, has_edge: true
+kubectl logs deployment/orchestration-supervisor -n artbattle-orchestration --tail=5
+```
+
+## 4. Health Checks
+
+```bash
+# From local (port-forward first)
+kubectl port-forward -n artbattle-orchestration svc/orchestration-api 3000:3000 &
+curl -sS http://localhost:3000/healthz
+curl -sS http://localhost:3000/readyz   # checks OpenAI key + gateway reachability
+
+kubectl port-forward -n artbattle-orchestration svc/orchestration-supervisor 8081:8081 &
 curl -sS http://localhost:8081/healthz
 curl -sS http://localhost:8081/readyz
 ```
 
-## 3. Deployment
+## 5. Secrets Management
+
+All secrets live in `orchestration-secrets` (Opaque), injected via `envFrom`:
 
 ```bash
-# 1. Run observability migrations on Supabase (one-time)
-psql "$SUPABASE_DB_URL" -f sql/001_create_esbmcp_tables.sql
-psql "$SUPABASE_DB_URL" -f sql/002_create_esbmcp_views.sql
+# List secret keys
+kubectl get secret orchestration-secrets -n artbattle-orchestration \
+  -o jsonpath='{.data}' | python3 -c "import sys,json; print('\n'.join(sorted(json.load(sys.stdin).keys())))"
 
-# 2. Apply secrets and k8s manifests
-kubectl apply -f deploy/k8s/base/secrets.template.yaml
-kubectl apply -k deploy/k8s/base
+# View a specific secret value
+kubectl get secret orchestration-secrets -n artbattle-orchestration \
+  -o jsonpath='{.data.OPENAI_API_KEY}' | base64 -d
+
+# Update a secret (edit base64 values)
+kubectl edit secret orchestration-secrets -n artbattle-orchestration
+
+# After updating, restart to pick up changes
+kubectl rollout restart deployment/orchestration-api deployment/orchestration-supervisor \
+  -n artbattle-orchestration
 ```
 
-## 4. Tool Domains and Counts
+| Key | Purpose |
+|-----|---------|
+| `SLACK_BOT_TOKEN` | Bot User OAuth Token (xoxb-) |
+| `SLACK_APP_TOKEN` | Socket Mode App-Level Token (xapp-) |
+| `SLACK_SIGNING_SECRET` | Request signature verification |
+| `SLACK_APP_CLIENT_SECRET` | OAuth client secret |
+| `OPENAI_API_KEY` | OpenAI API access |
+| `MCP_GATEWAY_AUTH_TOKEN` | Bearer token: slackbot → gateway |
+| `MCP_REQUEST_SIGNING_SECRET` | HMAC signing: slackbot → gateway |
+| `SUPABASE_DB_URL` | Postgres connection string |
+| `SUPABASE_URL` | Edge Function base URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Edge Function auth |
 
-| Domain | Tools | Module | Risk |
-|--------|-------|--------|------|
+## 6. Tool Domains
+
+| Domain | Tools | Module | Notes |
+|--------|-------|--------|-------|
 | data-read | 15 | `src/tools/data_read.js` | All read-only |
 | profile-integrity | 10 | `src/tools/profile_integrity.js` | 4 write-gated |
-| payments | 9 | `src/tools/payments.js` | 2 write-gated |
+| payments | 9 | `src/tools/payments.js` | 2 write-gated; uses production balance formula |
 | growth-marketing | 7 | `src/tools/growth_marketing.js` | All read-only |
-| platform-db-edge | 5 | `src/tools/platform_ops.js` | All read-only |
+| platform-db-edge | 7 | `src/tools/platform_ops.js` | Includes bot introspection + bug reports |
 
-## 5. Common Incidents
+## 7. RBAC
 
-### 5.1 Tool SQL errors
+### Static Role Map
 
-**Check first:** `esbmcp_v_unresolved_errors` view in Supabase.
+Set via `RBAC_USER_MAP_JSON` env var on orchestration-api:
+```json
+{"U0337E73E": "ops"}
+```
+
+### Open Viewer Channels
+
+Set via `OPEN_VIEWER_CHANNELS` env var (default: `C0AHV5ZCJG4`).
+Any user in these channels gets the `viewer` role automatically (read-only tools only).
+
+### Adding a New User
+
+```bash
+# Get current value
+kubectl get deployment orchestration-api -n artbattle-orchestration \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="RBAC_USER_MAP_JSON")].value}'
+
+# Patch with updated map
+kubectl set env deployment/orchestration-api -n artbattle-orchestration \
+  'RBAC_USER_MAP_JSON={"U0337E73E":"ops","UNEWUSERID":"viewer"}'
+```
+
+## 8. Common Incidents
+
+### 8.1 Tool SQL errors
+
+**Check first:** `esbmcp_v_unresolved_errors` view in Supabase, or ask the bot: `@Arthur Bot show me recent errors`
 
 ```sql
 SELECT tool_name, error_type, error_code, error_message, error_hint,
@@ -73,17 +234,18 @@ ORDER BY created_at DESC LIMIT 10;
 
 Common causes:
 - Table or column name mismatch (schema evolved since tool was written)
+- Invalid UUID passed by model (should be caught by validation now)
 - Missing index causing timeout on large tables
 - Permission denied (wrong connection string — needs service_role for writes)
 
-### 5.2 High error rate on a specific tool
+### 8.2 High error rate on a specific tool
 
 ```sql
 SELECT * FROM esbmcp_v_error_digest_7d
 WHERE tool_name = 'lookup_event';
 ```
 
-### 5.3 Employee reports bad/wrong answer
+### 8.3 Employee reports bad/wrong answer
 
 Check the full conversation:
 ```sql
@@ -93,48 +255,70 @@ WHERE slack_user_id = 'U...'
 ORDER BY created_at DESC LIMIT 5;
 ```
 
-Check if the employee left feedback:
-```sql
-SELECT * FROM esbmcp_v_negative_feedback
-ORDER BY feedback_at DESC LIMIT 10;
-```
-
-### 5.4 Gateway not connecting to database
+### 8.4 Gateway not connecting to database
 
 Verify `SUPABASE_DB_URL` is set in `orchestration-secrets`. Check gateway logs:
 ```bash
-kubectl logs -n artbattle-orchestration deploy/orchestration-supervisor | grep db_
+kubectl logs -n artbattle-orchestration deploy/orchestration-supervisor --tail=10 | grep db_
 ```
 
-Look for `db_client_skipped` (env var missing) or `db_client_created` (connected).
+Look for `db_not_configured` (env var missing) or `db_connected` (success).
 
-### 5.5 Rate limit complaints
+### 8.5 Gateway returning 404 for tools
 
-```sql
-SELECT * FROM esbmcp_v_audit_denials_7d
-WHERE event_type = 'rate_limit_exceeded';
+This means the gateway is running the **wrong image** (likely the slackbot image). Verify:
+```bash
+kubectl logs deploy/orchestration-supervisor -n artbattle-orchestration --tail=5
+```
+If it says `slackbot_started` instead of `mcp_gateway_started`, rebuild and push the correct image:
+```bash
+docker build --platform linux/amd64 --no-cache \
+  -t registry.digitalocean.com/esbmcp/orchestration-supervisor:latest \
+  -f services/mcp-gateway/Dockerfile .
+docker push registry.digitalocean.com/esbmcp/orchestration-supervisor:latest
+kubectl rollout restart deployment/orchestration-supervisor -n artbattle-orchestration
 ```
 
-Adjust via `RATE_LIMIT_USER_MAX` and `RATE_LIMIT_CHANNEL_MAX` env vars.
+### 8.6 Registry push denied (repo limit)
 
-## 6. Secret Rotation
+The free DOCR tier has a 2-repo limit. If you see `denied: registry contains 2 repositories, limit is 1`:
+```bash
+# Run garbage collection first
+doctl registry garbage-collection start --force
 
-1. Rotate orchestration secrets in `artbattle-orchestration` namespace.
-2. Rotate runner-domain secrets in `artbattle-execution` namespace (when runners are active).
-3. Restart impacted deployments and verify tool execution.
+# Check existing repos
+doctl registry repo list-v2
+```
+You can only push to existing repo names (`orchestration-api`, `orchestration-supervisor`).
 
-Key secrets for the gateway:
-- `SUPABASE_DB_URL` — Postgres connection string
-- `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` — Edge Function access
-- `MCP_GATEWAY_AUTH_TOKEN` + `MCP_REQUEST_SIGNING_SECRET` — inter-service auth
+### 8.7 Thread context not working
 
-## 7. Emergency Read-Only Mode
+The bot needs `channels:history` scope. Check logs for:
+```bash
+kubectl logs deploy/orchestration-api -n artbattle-orchestration --tail=20 | grep thread_context
+```
+If `missing_scope`, add `channels:history` in the Slack app's OAuth & Permissions → Bot Token Scopes, then reinstall.
+
+## 9. Slack App Scopes
+
+Required bot token scopes (set at api.slack.com/apps):
+
+| Scope | Purpose |
+|-------|---------|
+| `app_mentions:read` | Listen for @mentions |
+| `chat:write` | Send messages and thread replies |
+| `commands` | Register /ab slash command |
+| `channels:history` | Read thread context for follow-up questions |
+| `reactions:read` | Read reactions (future) |
+| `reactions:write` | Add hourglass typing indicator |
+
+## 10. Emergency Read-Only Mode
 
 1. Set `ENABLE_MUTATING_TOOLS=false` on the gateway (default).
 2. All 6 write-gated tools will return "Mutating tools are disabled by policy".
-3. 40 read-only tools continue working normally.
+3. 42 read-only tools continue working normally.
 
-## 8. Observability Queries
+## 11. Observability Queries
 
 ### Daily usage summary
 ```sql
@@ -151,7 +335,41 @@ SELECT * FROM esbmcp_v_user_activity_30d ORDER BY total_sessions DESC LIMIT 10;
 SELECT * FROM esbmcp_v_tool_usage_30d ORDER BY total_calls DESC;
 ```
 
+### Token usage and cost
+```sql
+SELECT ai_model, COUNT(*) AS sessions,
+       SUM(prompt_tokens) AS total_prompt,
+       SUM(completion_tokens) AS total_completion,
+       SUM(total_tokens) AS total_tokens,
+       AVG(api_rounds)::numeric(10,1) AS avg_rounds
+FROM esbmcp_chat_sessions
+WHERE created_at > NOW() - INTERVAL '7 days'
+GROUP BY ai_model;
+```
+
+### Bug reports
+```sql
+SELECT * FROM esbmcp_bug_reports
+WHERE status IN ('open', 'in_progress')
+ORDER BY created_at DESC;
+```
+
 ### Data retention cleanup (run weekly)
 ```sql
 SELECT esbmcp_cleanup_old_data(90);
+```
+
+## 12. Run SQL on Live DB
+
+For quick one-off queries, exec into a pod:
+```bash
+kubectl exec deployment/orchestration-supervisor -n artbattle-orchestration -- node -e "
+const postgres = require('postgres');
+const sql = postgres(process.env.SUPABASE_DB_URL, { ssl: 'require' });
+(async () => {
+  const rows = await sql\`SELECT COUNT(*) FROM esbmcp_chat_sessions\`;
+  console.log(rows);
+  await sql.end();
+})().catch(e => { console.error(e.message); process.exit(1); });
+"
 ```

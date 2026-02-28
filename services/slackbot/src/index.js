@@ -316,84 +316,78 @@ async function handle_prompt({
     max_output_tokens: service_config.openai.max_output_tokens,
     logger,
     tool_executor: async ({ tool_name, arguments_payload }) => {
-      try {
-        const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
+      const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
 
-        if (!tool_definition) {
-          return { error: `Tool ${tool_name} is not available.` };
-        }
+      if (!tool_definition) {
+        return { error: `Tool ${tool_name} is not available.` };
+      }
 
-        const current_count = tool_call_counts.get(tool_name) || 0;
-        const next_count = current_count + 1;
-        const tool_max_calls =
-          Number(tool_definition.max_calls_per_request) > 0
-            ? tool_definition.max_calls_per_request
-            : service_config.mcp.max_tool_calls_per_request;
+      const current_count = tool_call_counts.get(tool_name) || 0;
+      const next_count = current_count + 1;
+      const tool_max_calls =
+        Number(tool_definition.max_calls_per_request) > 0
+          ? tool_definition.max_calls_per_request
+          : service_config.mcp.max_tool_calls_per_request;
 
-        if (next_count > tool_max_calls) {
-          return { error: `Tool ${tool_name} has been called too many times in this request (max ${tool_max_calls}). Try a different approach or be more specific.` };
-        }
+      if (next_count > tool_max_calls) {
+        return { error: `Tool ${tool_name} has been called too many times in this request (max ${tool_max_calls}). Try a different approach or be more specific.` };
+      }
 
-        tool_call_counts.set(tool_name, next_count);
+      tool_call_counts.set(tool_name, next_count);
 
-        // Interactive confirmation for non-low-risk tools
-        let confirmed_for_request = is_confirmed;
-        if (
-          tool_definition.risk_level !== RISK_LEVELS.LOW &&
-          !is_confirmed
-        ) {
-          if (confirm_fn) {
-            const user_confirmed = await confirm_fn(tool_name, tool_definition, arguments_payload);
-            if (!user_confirmed) {
-              return { error: `Action *${tool_name}* was cancelled by the user.`, cancelled: true };
-            }
-            confirmed_for_request = true;
-          } else {
-            return { error: `Tool ${tool_name} requires confirmation. Add the word CONFIRM in your request.` };
+      // Interactive confirmation for non-low-risk tools
+      let confirmed_for_request = is_confirmed;
+      if (
+        tool_definition.risk_level !== RISK_LEVELS.LOW &&
+        !is_confirmed
+      ) {
+        if (confirm_fn) {
+          const user_confirmed = await confirm_fn(tool_name, tool_definition, arguments_payload);
+          if (!user_confirmed) {
+            return { error: `Action *${tool_name}* was cancelled by the user.`, cancelled: true };
           }
+          confirmed_for_request = true;
+        } else {
+          return { error: `Tool ${tool_name} requires confirmation. Add the word CONFIRM in your request.` };
         }
+      }
 
-        const request_context = {
-          team_id: identity_context.team_id,
-          channel_id: identity_context.channel_id,
-          user_id: identity_context.user_id,
-          username: identity_context.username,
-          role: role_name,
-          confirmed: confirmed_for_request,
-          session_id
-        };
+      const request_context = {
+        team_id: identity_context.team_id,
+        channel_id: identity_context.channel_id,
+        user_id: identity_context.user_id,
+        username: identity_context.username,
+        role: role_name,
+        confirmed: confirmed_for_request,
+        session_id
+      };
 
-        const tool_start = Date.now();
-        const result = await mcp_client.call_tool({
+      const argument_keys = arguments_payload ? Object.keys(arguments_payload).sort().join(",") : "";
+      const tool_start = Date.now();
+      let result;
+      try {
+        result = await mcp_client.call_tool({
           tool_name,
           arguments_payload,
           request_context
         });
-        const tool_duration = Date.now() - tool_start;
-
-        tool_call_details.push({
-          tool_name,
-          arguments_hash: arguments_payload ? Object.keys(arguments_payload).sort().join(",") : "",
-          duration_ms: tool_duration,
-          ok: !result?.error
-        });
-
-        return result;
       } catch (tool_error) {
         logger.error("tool_executor_error", {
           tool_name,
           error_message: tool_error?.message
         });
-
-        tool_call_details.push({
-          tool_name,
-          arguments_hash: arguments_payload ? Object.keys(arguments_payload).sort().join(",") : "",
-          duration_ms: 0,
-          ok: false
-        });
-
-        return { error: `Tool ${tool_name} failed: ${tool_error?.message || "unknown error"}` };
+        result = { error: `Tool ${tool_name} failed: ${tool_error?.message || "unknown error"}` };
       }
+      const tool_duration = Date.now() - tool_start;
+
+      tool_call_details.push({
+        tool_name,
+        argument_keys,
+        duration_ms: tool_duration,
+        ok: !result?.error
+      });
+
+      return result;
     }
   });
 
@@ -569,46 +563,38 @@ function register_confirmation_actions(app) {
 }
 
 // ---------------------------------------------------------------------------
-// Typing indicator (reaction-based)
+// Typing indicator (Slack assistant thread status)
 // ---------------------------------------------------------------------------
-const TYPING_INDICATOR_TIMEOUT_MS = 30_000;
-const TYPING_REACTION = "hourglass_flowing_sand";
 
-function create_typing_indicator(slack_client, channel, message_ts) {
-  if (!slack_client || !channel || !message_ts) {
+function create_typing_indicator(slack_client, channel, thread_ts) {
+  if (!slack_client || !channel || !thread_ts) {
     return { start() {}, stop() {} };
   }
 
   let active = false;
-  let timeout_handle = null;
 
   const stop = async () => {
     if (!active) return;
     active = false;
-    if (timeout_handle) {
-      clearTimeout(timeout_handle);
-      timeout_handle = null;
-    }
     try {
-      await slack_client.reactions.remove({
-        channel,
-        timestamp: message_ts,
-        name: TYPING_REACTION
+      await slack_client.assistant.threads.setStatus({
+        channel_id: channel,
+        thread_ts,
+        status: ""
       });
     } catch (_err) {
-      // Reaction may already be removed or message deleted — ignore
+      // Status auto-clears on reply anyway — ignore
     }
   };
 
   const start = async () => {
     try {
-      await slack_client.reactions.add({
-        channel,
-        timestamp: message_ts,
-        name: TYPING_REACTION
+      await slack_client.assistant.threads.setStatus({
+        channel_id: channel,
+        thread_ts,
+        status: "is thinking..."
       });
       active = true;
-      timeout_handle = setTimeout(() => stop(), TYPING_INDICATOR_TIMEOUT_MS);
     } catch (_err) {
       // Non-critical — don't block the request
     }
@@ -617,7 +603,26 @@ function create_typing_indicator(slack_client, channel, message_ts) {
   return { start, stop };
 }
 
-async function handle_and_reply({ prompt_text, identity_context, reply_fn, event_label, interaction_type, allowed_tools_manifest, tool_index, openai_client, mcp_client, session_writer, typing_indicator, confirm_fn }) {
+// ---------------------------------------------------------------------------
+// Summary / thread splitting for long responses
+// ---------------------------------------------------------------------------
+const THREAD_THRESHOLD_CHARS = 500;
+
+function extract_summary_line(full_text) {
+  // Take the first non-empty line (or first sentence) as the summary
+  const lines = full_text.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length <= 1) return null; // Short enough — no split needed
+
+  const first_line = lines[0].trim();
+  // If the first line is already a decent summary (< 200 chars), use it
+  if (first_line.length > 0 && first_line.length < 200) {
+    return first_line;
+  }
+  // Otherwise truncate
+  return first_line.slice(0, 150) + "…";
+}
+
+async function handle_and_reply({ prompt_text, identity_context, reply_fn, event_label, interaction_type, allowed_tools_manifest, tool_index, openai_client, mcp_client, session_writer, typing_indicator, confirm_fn, slack_client, channel_id, thread_ts }) {
   const session_start_ms = Date.now();
   await typing_indicator?.start();
   try {
@@ -633,7 +638,22 @@ async function handle_and_reply({ prompt_text, identity_context, reply_fn, event
       confirm_fn
     });
 
-    await reply_fn(markdown_to_slack_mrkdwn(response_text));
+    const formatted = markdown_to_slack_mrkdwn(response_text);
+
+    // Always reply as a thread on the user's message (or inside existing thread)
+    if (thread_ts && slack_client && channel_id) {
+      await slack_client.chat.postMessage({
+        channel: channel_id,
+        thread_ts,
+        text: formatted
+      });
+    } else if (!slack_client || !channel_id) {
+      // Fallback for slash commands or missing client
+      await reply_fn(formatted);
+    } else {
+      // Should not happen (thread_ts is always set for app_mention), but safety fallback
+      await reply_fn(formatted);
+    }
   } catch (error) {
     const error_id = create_error_id();
 
@@ -741,7 +761,7 @@ async function start_service() {
 
   register_confirmation_actions(app);
 
-  app.command(service_config.slack.command_prefix, async ({ command, ack, respond }) => {
+  app.command(service_config.slack.command_prefix, async ({ command, ack, respond, client }) => {
     await ack();
 
     await handle_and_reply({
@@ -759,15 +779,43 @@ async function start_service() {
       tool_index,
       openai_client,
       mcp_client,
-      session_writer
+      session_writer,
+      slack_client: client,
+      channel_id: command.channel_id
     });
   });
 
   app.event("app_mention", async ({ event, body, say, client }) => {
-    const typing = create_typing_indicator(client, event.channel, event.ts);
+    const thread_ts = event.thread_ts || event.ts;
+    const typing = create_typing_indicator(client, event.channel, thread_ts);
     const confirm = create_confirmation_handler(client, event.channel);
+
+    // If this mention is inside a thread, fetch prior messages for context
+    let prompt_text = event.text;
+    if (event.thread_ts) {
+      try {
+        const thread = await client.conversations.replies({
+          channel: event.channel,
+          ts: event.thread_ts,
+          limit: 20
+        });
+        const prior_messages = (thread.messages || [])
+          .filter((m) => m.ts !== event.ts) // exclude the current message
+          .map((m) => {
+            const author = m.bot_id ? "Arthur Bot" : (m.user ? `<@${m.user}>` : "Unknown");
+            return `${author}: ${m.text}`;
+          })
+          .join("\n");
+        if (prior_messages) {
+          prompt_text = `[Thread context — previous messages in this thread]\n${prior_messages}\n\n[Current question]\n${event.text}`;
+        }
+      } catch (thread_err) {
+        logger.warn("thread_context_fetch_failed", { error_message: thread_err?.message });
+      }
+    }
+
     await handle_and_reply({
-      prompt_text: event.text,
+      prompt_text,
       identity_context: {
         team_id: body.team_id,
         channel_id: event.channel,
@@ -783,7 +831,10 @@ async function start_service() {
       mcp_client,
       session_writer,
       typing_indicator: typing,
-      confirm_fn: confirm
+      confirm_fn: confirm,
+      slack_client: client,
+      channel_id: event.channel,
+      thread_ts
     });
   });
 

@@ -938,7 +938,7 @@
     },
     {
       "tool_name": "get_artists_owed",
-      "description": "List all artists who are owed money for an event \u2014 shows sales vs payments made and outstanding balance. Use when someone asks who still needs to be paid, outstanding artist payments, or unpaid artists.",
+      "description": "Calculate how much money is owed to artists. Uses the production formula: credits = art sales (status='paid') * event's artist_auction_portion, debits = all non-cancelled payments. Can query by event, by artist_profile_id, or with NO parameters to get ALL unpaid artists globally. For large result sets (>25 artists) returns a summary with top 20 and currency totals. Use when someone asks about an artist's balance, how much they're owed, outstanding payments, who needs to be paid, or all unpaid artists.",
       "risk_level": "low",
       "domain": "payments",
       "allowed_roles": [
@@ -947,18 +947,21 @@
         "viewer"
       ],
       "requires_confirmation": false,
-      "max_calls_per_request": 2,
+      "max_calls_per_request": 3,
       "redaction_rules": [],
       "parameters_schema": {
         "type": "object",
         "properties": {
           "eid": {
-            "type": "string"
+            "type": "string",
+            "description": "Event ID (e.g. AB4001). Shows all artists owed for this event."
+          },
+          "artist_profile_id": {
+            "type": "string",
+            "description": "Artist profile UUID. Shows balance across all events for this artist. Get from lookup_artist_profile first."
           }
         },
-        "required": [
-          "eid"
-        ],
+        "required": [],
         "additionalProperties": false
       }
     },
@@ -1476,6 +1479,73 @@
           "limit": {
             "type": "integer",
             "description": "Max tools to return in breakdown (default 30, max 50)",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "create_bug_report",
+      "description": "File a bug report. Use when an employee asks to report a bug, log an issue, or flag something broken. Automatically captures who reported it. Summarize the issue into a clear title and description.",
+      "domain": "platform-db-edge",
+      "risk_level": "medium",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "max_calls_per_request": 2,
+      "requires_confirmation": false,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short bug title (e.g. 'Wrong city shown for AB4003')"
+          },
+          "description": {
+            "type": "string",
+            "description": "Full description of the bug including context, expected vs actual behavior"
+          },
+          "related_eid": {
+            "type": "string",
+            "description": "Event ID if the bug relates to a specific event"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "normal", "high", "critical"],
+            "description": "Bug priority (default: normal)"
+          }
+        },
+        "required": ["title", "description"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_bug_reports",
+      "description": "List bug reports filed through the bot. Use when someone asks to see open bugs, recent bug reports, or check on reported issues.",
+      "domain": "platform-db-edge",
+      "risk_level": "low",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "max_calls_per_request": 2,
+      "requires_confirmation": false,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["open", "in_progress", "resolved", "closed"],
+            "description": "Filter by status (default: all)"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max reports to return (default 20, max 50)",
             "minimum": 1,
             "maximum": 50
           }

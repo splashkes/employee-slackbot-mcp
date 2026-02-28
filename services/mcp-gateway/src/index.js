@@ -240,6 +240,7 @@ async function start_service() {
     ) {
       const tool_name = decodeURIComponent(path_segments[2]);
       const request_start_ms = Date.now();
+      const safe_preview_keys = ["eid", "round", "group_by", "search_by", "status", "hours_back", "audience_filter", "table_name", "limit"];
 
       let parsed_request = null;
       let tool_definition = null;
@@ -289,7 +290,6 @@ async function start_service() {
         };
 
         // Build a PII-safe preview of arguments (only safe keys)
-        const safe_preview_keys = ["eid", "round", "group_by", "search_by", "status", "hours_back", "audience_filter", "table_name", "limit"];
         const arguments_preview = {};
         for (const key of safe_preview_keys) {
           if (key in arguments_payload) arguments_preview[key] = arguments_payload[key];
@@ -368,7 +368,8 @@ async function start_service() {
           tool_name,
           arguments_payload,
           service_config,
-          { sql, edge }
+          { sql, edge },
+          request_context
         );
 
         const duration_ms = Date.now() - request_start_ms;
@@ -454,10 +455,10 @@ async function start_service() {
           request_id: request.headers["x-request-id"] || null
         };
 
-        // Build safe arguments preview
+        // Build safe arguments preview (must match safe_preview_keys above)
         const fail_args = parsed_request?.body_payload?.arguments || {};
         const fail_preview = {};
-        for (const k of ["eid", "round", "group_by", "search_by", "status"]) {
+        for (const k of safe_preview_keys) {
           if (k in fail_args) fail_preview[k] = fail_args[k];
         }
 

@@ -259,6 +259,41 @@ CREATE INDEX IF NOT EXISTS idx_esbmcp_feedback_negative
 
 
 -- ---------------------------------------------------------------------------
+-- 6. esbmcp_bug_reports
+--    Bug reports filed by employees via the bot.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS esbmcp_bug_reports (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Who reported
+  slack_user_id   text        NOT NULL,
+  slack_username  text,
+  slack_channel_id text,
+
+  -- Report content
+  title           text        NOT NULL,
+  description     text,
+  related_eid     text,                        -- event ID if applicable
+
+  -- Status
+  status          text        NOT NULL DEFAULT 'open',  -- open | in_progress | resolved | closed
+  priority        text        DEFAULT 'normal',         -- low | normal | high | critical
+  resolved_at     timestamptz,
+  resolved_by     text,
+  resolution_note text,
+
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_esbmcp_bug_reports_status
+  ON esbmcp_bug_reports (status, created_at DESC)
+  WHERE status != 'closed';
+
+CREATE INDEX IF NOT EXISTS idx_esbmcp_bug_reports_created
+  ON esbmcp_bug_reports (created_at DESC);
+
+
+-- ---------------------------------------------------------------------------
 -- RLS: service-role only. These tables should NOT be readable by anon/users.
 -- ---------------------------------------------------------------------------
 ALTER TABLE esbmcp_chat_sessions ENABLE ROW LEVEL SECURITY;
@@ -266,6 +301,7 @@ ALTER TABLE esbmcp_tool_executions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE esbmcp_audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE esbmcp_tool_errors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE esbmcp_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE esbmcp_bug_reports ENABLE ROW LEVEL SECURITY;
 
 -- No policies = deny all for anon/authenticated.
 -- service_role bypasses RLS automatically.

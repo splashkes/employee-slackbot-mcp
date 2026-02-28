@@ -1,6 +1,15 @@
 // profile_integrity domain — 10 tools
 // Skills: 6-10, 21, 25, 27
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function require_uuid(value, field_name) {
+  if (!value || !UUID_RE.test(value)) {
+    return { error: `${field_name} must be a valid UUID. Use lookup_artist_profile first to get the real ID.` };
+  }
+  return null;
+}
+
 async function find_duplicate_profiles({ query, search_by }, sql) {
   const field = search_by || "phone";
 
@@ -48,6 +57,7 @@ async function find_duplicate_profiles({ query, search_by }, sql) {
 }
 
 async function update_artist_name({ artist_profile_id, new_name }, sql, _edge, service_config) {
+  const id_err = require_uuid(artist_profile_id, "artist_profile_id"); if (id_err) return id_err;
   if (!service_config.gateway.enable_mutating_tools) {
     throw new Error("Mutating tools are disabled by policy");
   }
@@ -77,6 +87,7 @@ async function update_artist_name({ artist_profile_id, new_name }, sql, _edge, s
 }
 
 async function update_artist_bio({ artist_profile_id, new_bio }, sql, _edge, service_config) {
+  const id_err = require_uuid(artist_profile_id, "artist_profile_id"); if (id_err) return id_err;
   if (!service_config.gateway.enable_mutating_tools) {
     throw new Error("Mutating tools are disabled by policy");
   }
@@ -105,6 +116,7 @@ async function update_artist_bio({ artist_profile_id, new_bio }, sql, _edge, ser
 }
 
 async function update_artist_country({ artist_profile_id, new_country }, sql, _edge, service_config) {
+  const id_err = require_uuid(artist_profile_id, "artist_profile_id"); if (id_err) return id_err;
   if (!service_config.gateway.enable_mutating_tools) {
     throw new Error("Mutating tools are disabled by policy");
   }
@@ -135,6 +147,7 @@ async function update_artist_country({ artist_profile_id, new_country }, sql, _e
 }
 
 async function get_artist_invitations({ eid, artist_profile_id }, sql) {
+  if (artist_profile_id) { const err = require_uuid(artist_profile_id, "artist_profile_id"); if (err) return err; }
   let rows;
 
   if (eid && artist_profile_id) {
@@ -294,6 +307,7 @@ async function refresh_vote_weights({ eid }, sql, _edge, service_config) {
 }
 
 async function get_qr_scan_status({ eid, person_id }, sql) {
+  if (person_id) { const err = require_uuid(person_id, "person_id"); if (err) return err; }
   let rows;
 
   if (person_id) {

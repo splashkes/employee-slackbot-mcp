@@ -413,6 +413,56 @@ async function get_bot_tool_stats({ hours_back, limit }, sql) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Bug reports
+// ---------------------------------------------------------------------------
+
+async function create_bug_report({ title, description, related_eid, priority }, sql, _edge, _config, request_context) {
+  if (!title || title.trim().length < 3) {
+    return { error: "Bug report title is required (at least 3 characters)." };
+  }
+
+  const rows = await sql`
+    INSERT INTO esbmcp_bug_reports (
+      slack_user_id, slack_username, slack_channel_id,
+      title, description, related_eid, priority
+    ) VALUES (
+      ${request_context?.user_id || "unknown"},
+      ${request_context?.username || null},
+      ${request_context?.channel_id || null},
+      ${title.trim()},
+      ${(description || "").trim() || null},
+      ${related_eid || null},
+      ${priority || "normal"}
+    )
+    RETURNING id, title, status, priority, created_at
+  `;
+
+  return { created: true, bug_report: rows[0] };
+}
+
+async function get_bug_reports({ status, limit }, sql) {
+  const max_rows = Math.min(limit || 20, 50);
+  const status_filter = status ? sql`AND status = ${status}` : sql``;
+
+  const rows = await sql`
+    SELECT id, slack_user_id, slack_username, title, description,
+           related_eid, status, priority,
+           resolved_by, resolution_note, resolved_at,
+           created_at
+    FROM esbmcp_bug_reports
+    WHERE 1=1 ${status_filter}
+    ORDER BY created_at DESC
+    LIMIT ${max_rows}
+  `;
+
+  const open_count = await sql`
+    SELECT COUNT(*) AS cnt FROM esbmcp_bug_reports WHERE status IN ('open', 'in_progress')
+  `;
+
+  return { bug_reports: rows, count: rows.length, open_count: Number(open_count[0]?.cnt || 0) };
+}
+
 const platform_ops_tools = {
   get_slack_queue_health,
   get_email_queue_stats,
@@ -421,7 +471,9 @@ const platform_ops_tools = {
   live_event_diagnostic,
   get_bot_errors,
   get_bot_sessions,
-  get_bot_tool_stats
+  get_bot_tool_stats,
+  create_bug_report,
+  get_bug_reports
 };
 
 export { platform_ops_tools };
