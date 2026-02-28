@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { RISK_LEVELS } from "@abcodex/shared/constants.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +30,8 @@ test("every tool definition includes required fields", () => {
   for (const tool_definition of payload.tools) {
     assert.equal(typeof tool_definition.tool_name, "string");
     assert.equal(typeof tool_definition.description, "string");
-    assert.equal(["low", "medium", "high"].includes(tool_definition.risk_level), true);
+    const valid_risk_levels = Object.values(RISK_LEVELS);
+    assert.equal(valid_risk_levels.includes(tool_definition.risk_level), true);
     assert.equal(Array.isArray(tool_definition.allowed_roles), true);
     assert.equal(typeof tool_definition.requires_confirmation, "boolean");
     assert.equal(typeof tool_definition.max_calls_per_request, "number");

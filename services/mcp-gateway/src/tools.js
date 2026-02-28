@@ -1,36 +1,9 @@
-import fs from "node:fs";
-
-function load_allowed_tools_manifest(file_path) {
-  const raw_text = fs.readFileSync(file_path, "utf8");
-  const manifest = JSON.parse(raw_text);
-
-  if (!Array.isArray(manifest.tools)) {
-    throw new Error("Invalid allowed tools manifest: expected tools array");
-  }
-
-  return manifest;
-}
-
-function get_tool_definition_by_name(manifest, tool_name) {
-  return manifest.tools.find((tool_definition) => tool_definition.tool_name === tool_name);
-}
-
-function is_tool_allowed_for_role(tool_definition, role_name, enable_mutating_tools) {
-  if (!tool_definition) {
-    return false;
-  }
-
-  const role_allowed = (tool_definition.allowed_roles || []).includes(role_name);
-  if (!role_allowed) {
-    return false;
-  }
-
-  if (tool_definition.risk_level === "high" && !enable_mutating_tools) {
-    return false;
-  }
-
-  return true;
-}
+export {
+  build_tool_index,
+  get_tool_definition_by_name,
+  is_tool_allowed_for_role,
+  load_allowed_tools_manifest
+} from "@abcodex/shared/tool_manifest.js";
 
 function validate_value_against_schema(value, schema, path_label) {
   const errors = [];
@@ -229,8 +202,5 @@ async function execute_tool_by_name(tool_name, arguments_payload, service_config
 
 export {
   execute_tool_by_name,
-  get_tool_definition_by_name,
-  is_tool_allowed_for_role,
-  load_allowed_tools_manifest,
   validate_tool_arguments
 };

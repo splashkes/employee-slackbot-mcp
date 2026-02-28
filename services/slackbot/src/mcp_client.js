@@ -1,91 +1,69 @@
-import crypto from "node:crypto";
+import { build_canonical_payload, compute_signature } from "@abcodex/shared/signing.js";
 
-function build_signed_headers({
-  request_signing_secret,
-  request_pathname,
-  request_body_text
-}) {
-  const timestamp_sec = Math.floor(Date.now() / 1000);
-  const canonical_payload = [
-    String(timestamp_sec),
-    "POST",
-    request_pathname,
-    request_body_text
-  ].join("\n");
+function create_mcp_client({ gateway_url, gateway_auth_token, request_signing_secret, timeout_ms }) {
+  const base_url = gateway_url.replace(/\/$/, "");
 
-  const signature_hex = crypto
-    .createHmac("sha256", request_signing_secret)
-    .update(canonical_payload)
-    .digest("hex");
+  async function call_tool({ tool_name, arguments_payload, request_context }) {
+    const controller = new AbortController();
+    const timeout_handle = setTimeout(() => controller.abort(), timeout_ms);
 
-  return {
-    timestamp_sec,
-    signature_hex
-  };
-}
-
-async function call_mcp_tool({
-  gateway_url,
-  gateway_auth_token,
-  request_signing_secret,
-  timeout_ms,
-  tool_name,
-  arguments_payload,
-  request_context
-}) {
-  const controller = new AbortController();
-  const timeout_handle = setTimeout(() => controller.abort(), timeout_ms);
-
-  const encoded_tool_name = encodeURIComponent(tool_name);
-  const request_url = `${gateway_url.replace(/\/$/, "")}/v1/tools/${encoded_tool_name}`;
-  const request_pathname = `/v1/tools/${encoded_tool_name}`;
-  const request_body_text = JSON.stringify({
-    arguments: arguments_payload,
-    request_context
-  });
-  const signed_headers = build_signed_headers({
-    request_signing_secret,
-    request_pathname,
-    request_body_text
-  });
-
-  try {
-    const response = await fetch(request_url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${gateway_auth_token}`,
-        "x-mcp-signature": signed_headers.signature_hex,
-        "x-mcp-timestamp": String(signed_headers.timestamp_sec),
-        "x-mcp-signature-version": "v1"
-      },
-      body: request_body_text,
-      signal: controller.signal
+    const encoded_tool_name = encodeURIComponent(tool_name);
+    const request_url = `${base_url}/v1/tools/${encoded_tool_name}`;
+    const request_pathname = `/v1/tools/${encoded_tool_name}`;
+    const request_body_text = JSON.stringify({
+      arguments: arguments_payload,
+      request_context
     });
 
-    const response_text = await response.text();
-    let response_json = {};
+    const timestamp_sec = Math.floor(Date.now() / 1000);
+    const canonical_payload = build_canonical_payload({
+      timestamp_sec,
+      method: "POST",
+      pathname: request_pathname,
+      body_text: request_body_text
+    });
+    const signature_hex = compute_signature(request_signing_secret, canonical_payload);
 
     try {
-      response_json = response_text ? JSON.parse(response_text) : {};
-    } catch (_error) {
-      response_json = {
-        ok: false,
-        error: "invalid_json_response",
-        raw: response_text
-      };
-    }
+      const response = await fetch(request_url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${gateway_auth_token}`,
+          "x-mcp-signature": signature_hex,
+          "x-mcp-timestamp": String(timestamp_sec),
+          "x-mcp-signature-version": "v1"
+        },
+        body: request_body_text,
+        signal: controller.signal
+      });
 
-    if (!response.ok || response_json.ok === false) {
-      throw new Error(
-        response_json.error || `MCP gateway request failed with status ${response.status}`
-      );
-    }
+      const response_text = await response.text();
+      let response_json = {};
 
-    return response_json;
-  } finally {
-    clearTimeout(timeout_handle);
+      try {
+        response_json = response_text ? JSON.parse(response_text) : {};
+      } catch (_error) {
+        response_json = {
+          ok: false,
+          error: "invalid_json_response",
+          raw: response_text
+        };
+      }
+
+      if (!response.ok || response_json.ok === false) {
+        throw new Error(
+          response_json.error || `MCP gateway request failed with status ${response.status}`
+        );
+      }
+
+      return response_json;
+    } finally {
+      clearTimeout(timeout_handle);
+    }
   }
+
+  return { call_tool };
 }
 
-export { call_mcp_tool };
+export { create_mcp_client };

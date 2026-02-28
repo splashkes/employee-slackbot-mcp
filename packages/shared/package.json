@@ -1,0 +1,14 @@
+{
+  "name": "@abcodex/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared utilities for slackbot and MCP gateway services",
+  "exports": {
+    "./logger.js": "./logger.js",
+    "./env_parsers.js": "./env_parsers.js",
+    "./tool_manifest.js": "./tool_manifest.js",
+    "./signing.js": "./signing.js",
+    "./constants.js": "./constants.js"
+  }
+}

@@ -1,18 +1,22 @@
 import { App } from "@slack/bolt";
 import { service_config, assert_required_config } from "./config.js";
 import { Logger } from "./logger.js";
-import { call_mcp_tool } from "./mcp_client.js";
+import { create_mcp_client } from "./mcp_client.js";
 import { create_openai_client, run_openai_tool_routing } from "./openai_router.js";
 import {
-  FixedWindowRateLimiter,
+  build_tool_index,
   get_allowed_tools_for_role,
   get_tool_definition_by_name,
+  load_allowed_tools_manifest
+} from "./policy.js";
+import {
+  FixedWindowRateLimiter,
   is_confirmation_satisfied,
   is_identity_allowed,
-  load_allowed_tools_manifest,
   redact_text,
   truncate_text
 } from "./policy.js";
+import { AUDIT_EVENTS, MCP_ERROR_CODES, RISK_LEVELS } from "@abcodex/shared/constants.js";
 
 const logger = new Logger(service_config.app.log_level);
 const role_cache_map = new Map();
@@ -35,28 +39,18 @@ function create_error_id() {
   return `err_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function build_safe_error_message(error_id, error_message) {
-  const normalized_error = String(error_message || "").toLowerCase();
+const SAFE_ERROR_MAP = {
+  [MCP_ERROR_CODES.CONFIRMATION_REQUIRED]:
+    "This action requires explicit confirmation. Add CONFIRM to your request and retry.",
+  [MCP_ERROR_CODES.TOOL_NOT_ALLOWED_FOR_ROLE]:
+    "Your role is not permitted to run one of the requested tools.",
+  [MCP_ERROR_CODES.INVALID_ARGUMENTS]:
+    "The tool request was rejected because one or more arguments were invalid."
+};
 
-  if (
-    normalized_error.includes("requires explicit confirmation") ||
-    normalized_error.includes("confirmation_required")
-  ) {
-    return "This action requires explicit confirmation. Add CONFIRM to your request and retry.";
-  }
-
-  if (
-    normalized_error.includes("tool_not_allowed_for_role") ||
-    normalized_error.includes("is not allowed to execute")
-  ) {
-    return "Your role is not permitted to run one of the requested tools.";
-  }
-
-  if (normalized_error.includes("invalid_arguments")) {
-    return "The tool request was rejected because one or more arguments were invalid.";
-  }
-
-  return `Request failed due to an internal error. Reference ID: ${error_id}.`;
+function build_safe_error_message(error_id, error_code) {
+  return SAFE_ERROR_MAP[error_code] ||
+    `Request failed due to an internal error. Reference ID: ${error_id}.`;
 }
 
 function remove_bot_mentions(raw_text) {
@@ -149,12 +143,12 @@ function write_audit_event(event_name, metadata) {
   });
 }
 
-function get_response_redaction_rules(allowed_tools_manifest, executed_tool_calls) {
+function get_response_redaction_rules(tool_index, executed_tool_calls) {
   const collected_rules = new Set();
 
   for (const executed_call of executed_tool_calls) {
     const tool_definition = get_tool_definition_by_name(
-      allowed_tools_manifest,
+      tool_index,
       executed_call.tool_name
     );
 
@@ -170,7 +164,9 @@ async function handle_prompt({
   prompt_text,
   identity_context,
   allowed_tools_manifest,
-  openai_client
+  tool_index,
+  openai_client,
+  mcp_client
 }) {
   const normalized_prompt = remove_bot_mentions(prompt_text);
 
@@ -185,7 +181,7 @@ async function handle_prompt({
   const identity_result = is_identity_allowed(service_config, identity_context);
 
   if (!identity_result.allowed) {
-    write_audit_event("request_denied_identity", {
+    write_audit_event(AUDIT_EVENTS.REQUEST_DENIED_IDENTITY, {
       reason: identity_result.reason,
       identity_context
     });
@@ -196,7 +192,7 @@ async function handle_prompt({
   const rate_limit_result = apply_rate_limits(identity_context);
 
   if (!rate_limit_result.allowed) {
-    write_audit_event("request_denied_rate_limit", {
+    write_audit_event(AUDIT_EVENTS.REQUEST_DENIED_RATE_LIMIT, {
       reason: rate_limit_result.reason,
       identity_context
     });
@@ -207,7 +203,7 @@ async function handle_prompt({
   const role_name = await resolve_role_for_user(identity_context.user_id);
 
   if (!role_name) {
-    write_audit_event("request_denied_role", {
+    write_audit_event(AUDIT_EVENTS.REQUEST_DENIED_ROLE, {
       identity_context
     });
 
@@ -221,7 +217,7 @@ async function handle_prompt({
   );
 
   if (role_allowed_tools.length === 0) {
-    write_audit_event("request_denied_no_tools", {
+    write_audit_event(AUDIT_EVENTS.REQUEST_DENIED_NO_TOOLS, {
       identity_context,
       role_name
     });
@@ -231,6 +227,7 @@ async function handle_prompt({
 
   const started_at_ms = Date.now();
   const tool_call_counts = new Map();
+  const is_confirmed = is_confirmation_satisfied(normalized_prompt);
 
   const routing_result = await run_openai_tool_routing({
     openai_client,
@@ -241,7 +238,7 @@ async function handle_prompt({
     max_output_tokens: service_config.openai.max_output_tokens,
     logger,
     tool_executor: async ({ tool_name, arguments_payload }) => {
-      const tool_definition = get_tool_definition_by_name(allowed_tools_manifest, tool_name);
+      const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
 
       if (!tool_definition) {
         throw new Error(`Tool is not allowlisted: ${tool_name}`);
@@ -260,14 +257,8 @@ async function handle_prompt({
 
       tool_call_counts.set(tool_name, next_count);
 
-      if (!(tool_definition.allowed_roles || []).includes(role_name)) {
-        throw new Error(`Role ${role_name} is not allowed to execute ${tool_name}`);
-      }
-
-      const is_confirmed = is_confirmation_satisfied(normalized_prompt);
-
       if (
-        tool_definition.risk_level === "high" &&
+        tool_definition.risk_level === RISK_LEVELS.HIGH &&
         service_config.policy.require_confirmation_for_high_risk &&
         !is_confirmed
       ) {
@@ -284,11 +275,7 @@ async function handle_prompt({
         confirmed: is_confirmed
       };
 
-      return await call_mcp_tool({
-        gateway_url: service_config.mcp.gateway_url,
-        gateway_auth_token: service_config.mcp.gateway_auth_token,
-        request_signing_secret: service_config.mcp.request_signing_secret,
-        timeout_ms: service_config.mcp.timeout_ms,
+      return await mcp_client.call_tool({
         tool_name,
         arguments_payload,
         request_context
@@ -298,7 +285,7 @@ async function handle_prompt({
 
   const latency_ms = Date.now() - started_at_ms;
 
-  write_audit_event("request_completed", {
+  write_audit_event(AUDIT_EVENTS.REQUEST_COMPLETED, {
     identity_context,
     role_name,
     latency_ms,
@@ -306,18 +293,50 @@ async function handle_prompt({
   });
 
   const response_redaction_rules = get_response_redaction_rules(
-    allowed_tools_manifest,
+    tool_index,
     routing_result.executed_tool_calls
   );
   const redacted_text = redact_text(routing_result.response_text, response_redaction_rules);
   return truncate_text(redacted_text, service_config.limits.response_max_chars);
 }
 
+async function handle_and_reply({ prompt_text, identity_context, reply_fn, event_label, allowed_tools_manifest, tool_index, openai_client, mcp_client }) {
+  try {
+    const response_text = await handle_prompt({
+      prompt_text,
+      identity_context,
+      allowed_tools_manifest,
+      tool_index,
+      openai_client,
+      mcp_client
+    });
+
+    await reply_fn(response_text);
+  } catch (error) {
+    const error_id = create_error_id();
+
+    logger.error(event_label, {
+      error_id,
+      error_message: error?.message,
+      stack: error?.stack
+    });
+
+    await reply_fn(build_safe_error_message(error_id, error?.message));
+  }
+}
+
 async function start_service() {
   assert_required_config();
 
   const allowed_tools_manifest = load_allowed_tools_manifest(service_config.policy.allowed_tools_file);
+  const tool_index = build_tool_index(allowed_tools_manifest);
   const openai_client = create_openai_client(service_config.openai.api_key);
+  const mcp_client = create_mcp_client({
+    gateway_url: service_config.mcp.gateway_url,
+    gateway_auth_token: service_config.mcp.gateway_auth_token,
+    request_signing_secret: service_config.mcp.request_signing_secret,
+    timeout_ms: service_config.mcp.timeout_ms
+  });
 
   const app = new App({
     token: service_config.slack.bot_token,
@@ -347,57 +366,37 @@ async function start_service() {
   app.command(service_config.slack.command_prefix, async ({ command, ack, respond }) => {
     await ack();
 
-    try {
-      const response_text = await handle_prompt({
-        prompt_text: command.text,
-        identity_context: {
-          team_id: command.team_id,
-          channel_id: command.channel_id,
-          user_id: command.user_id
-        },
-        allowed_tools_manifest,
-        openai_client
-      });
-
-      await respond(response_text);
-    } catch (error) {
-      const error_id = create_error_id();
-
-      logger.error("command_handler_failed", {
-        error_id,
-        error_message: error?.message,
-        stack: error?.stack
-      });
-
-      await respond(build_safe_error_message(error_id, error?.message));
-    }
+    await handle_and_reply({
+      prompt_text: command.text,
+      identity_context: {
+        team_id: command.team_id,
+        channel_id: command.channel_id,
+        user_id: command.user_id
+      },
+      reply_fn: respond,
+      event_label: "command_handler_failed",
+      allowed_tools_manifest,
+      tool_index,
+      openai_client,
+      mcp_client
+    });
   });
 
   app.event("app_mention", async ({ event, body, say }) => {
-    try {
-      const response_text = await handle_prompt({
-        prompt_text: event.text,
-        identity_context: {
-          team_id: body.team_id,
-          channel_id: event.channel,
-          user_id: event.user
-        },
-        allowed_tools_manifest,
-        openai_client
-      });
-
-      await say(response_text);
-    } catch (error) {
-      const error_id = create_error_id();
-
-      logger.error("mention_handler_failed", {
-        error_id,
-        error_message: error?.message,
-        stack: error?.stack
-      });
-
-      await say(build_safe_error_message(error_id, error?.message));
-    }
+    await handle_and_reply({
+      prompt_text: event.text,
+      identity_context: {
+        team_id: body.team_id,
+        channel_id: event.channel,
+        user_id: event.user
+      },
+      reply_fn: say,
+      event_label: "mention_handler_failed",
+      allowed_tools_manifest,
+      tool_index,
+      openai_client,
+      mcp_client
+    });
   });
 
   app.error((error) => {

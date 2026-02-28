@@ -1,15 +1,16 @@
 import http from "node:http";
-import crypto from "node:crypto";
-import { URL } from "node:url";
 import { service_config, assert_required_config } from "./config.js";
 import { Logger } from "./logger.js";
 import {
+  build_tool_index,
   execute_tool_by_name,
   get_tool_definition_by_name,
   is_tool_allowed_for_role,
   load_allowed_tools_manifest,
   validate_tool_arguments
 } from "./tools.js";
+import { build_canonical_payload, compute_signature, hash_json_payload } from "@abcodex/shared/signing.js";
+import { MCP_ERROR_CODES } from "@abcodex/shared/constants.js";
 
 const logger = new Logger(service_config.app.log_level);
 
@@ -42,7 +43,7 @@ async function parse_json_body(request, max_body_bytes) {
     total_bytes += chunk.length;
 
     if (total_bytes > max_body_bytes) {
-      throw new Error("request_body_too_large");
+      throw new Error(MCP_ERROR_CODES.REQUEST_BODY_TOO_LARGE);
     }
 
     chunks.push(chunk);
@@ -62,19 +63,8 @@ async function parse_json_body(request, max_body_bytes) {
       body_text
     };
   } catch (_error) {
-    throw new Error("invalid_json_body");
+    throw new Error(MCP_ERROR_CODES.INVALID_JSON_BODY);
   }
-}
-
-function hash_arguments_payload(arguments_payload) {
-  return crypto
-    .createHash("sha256")
-    .update(JSON.stringify(arguments_payload || {}))
-    .digest("hex");
-}
-
-function build_signature_payload({ timestamp_sec, method_name, path_name, body_text }) {
-  return [String(timestamp_sec), method_name.toUpperCase(), path_name, body_text].join("\n");
 }
 
 function compare_hex_signatures(expected_signature, actual_signature) {
@@ -96,7 +86,9 @@ function compare_hex_signatures(expected_signature, actual_signature) {
   }
 }
 
-function validate_request_signature({ request, request_url, request_body_text }) {
+import crypto from "node:crypto";
+
+function validate_request_signature({ request, request_pathname, request_body_text }) {
   const timestamp_header = request.headers["x-mcp-timestamp"];
   const signature_header = request.headers["x-mcp-signature"];
   const signature_version = request.headers["x-mcp-signature-version"];
@@ -138,17 +130,16 @@ function validate_request_signature({ request, request_url, request_body_text })
     };
   }
 
-  const expected_signature = crypto
-    .createHmac("sha256", service_config.gateway.request_signing_secret)
-    .update(
-      build_signature_payload({
-        timestamp_sec,
-        method_name: request.method || "POST",
-        path_name: request_url.pathname,
-        body_text: request_body_text
-      })
-    )
-    .digest("hex");
+  const canonical_payload = build_canonical_payload({
+    timestamp_sec,
+    method: request.method || "POST",
+    pathname: request_pathname,
+    body_text: request_body_text
+  });
+  const expected_signature = compute_signature(
+    service_config.gateway.request_signing_secret,
+    canonical_payload
+  );
 
   if (!compare_hex_signatures(expected_signature, signature_header)) {
     return {
@@ -175,25 +166,30 @@ async function start_service() {
   const allowed_tools_manifest = load_allowed_tools_manifest(
     service_config.gateway.allowed_tools_file
   );
+  const tool_index = build_tool_index(allowed_tools_manifest);
 
   const server = http.createServer(async (request, response) => {
-    const request_url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+    const raw_url = request.url || "/";
+
+    // Fast path for health probes — avoid URL parsing overhead
+    if (request.method === "GET") {
+      if (raw_url === "/healthz") {
+        send_text(response, 200, "ok");
+        return;
+      }
+      if (raw_url === "/readyz") {
+        send_text(response, 200, "ready");
+        return;
+      }
+    }
+
+    const request_url = new URL(raw_url, `http://${request.headers.host || "localhost"}`);
     const path_segments = get_path_segments(request_url.pathname);
-
-    if (request.method === "GET" && request_url.pathname === "/healthz") {
-      send_text(response, 200, "ok");
-      return;
-    }
-
-    if (request.method === "GET" && request_url.pathname === "/readyz") {
-      send_text(response, 200, "ready");
-      return;
-    }
 
     if (!is_authorized(request)) {
       send_json(response, 401, {
         ok: false,
-        error: "unauthorized"
+        error: MCP_ERROR_CODES.UNAUTHORIZED
       });
       return;
     }
@@ -225,7 +221,7 @@ async function start_service() {
         );
         const signature_result = validate_request_signature({
           request,
-          request_url,
+          request_pathname: request_url.pathname,
           request_body_text: parsed_request.body_text
         });
 
@@ -237,7 +233,7 @@ async function start_service() {
 
           send_json(response, 401, {
             ok: false,
-            error: "invalid_request_signature"
+            error: MCP_ERROR_CODES.INVALID_REQUEST_SIGNATURE
           });
           return;
         }
@@ -249,11 +245,11 @@ async function start_service() {
         const role_name = request_context.role || "";
         const confirmed = request_context.confirmed === true;
 
-        const tool_definition = get_tool_definition_by_name(allowed_tools_manifest, tool_name);
+        const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
         if (!tool_definition) {
           send_json(response, 404, {
             ok: false,
-            error: "tool_not_found"
+            error: MCP_ERROR_CODES.TOOL_NOT_FOUND
           });
           return;
         }
@@ -261,7 +257,7 @@ async function start_service() {
         if (!role_name) {
           send_json(response, 400, {
             ok: false,
-            error: "missing_role"
+            error: MCP_ERROR_CODES.MISSING_ROLE
           });
           return;
         }
@@ -270,7 +266,7 @@ async function start_service() {
         if (!validation_result.valid) {
           send_json(response, 400, {
             ok: false,
-            error: "invalid_arguments",
+            error: MCP_ERROR_CODES.INVALID_ARGUMENTS,
             details: validation_result.errors
           });
           return;
@@ -285,7 +281,7 @@ async function start_service() {
         if (!role_allowed) {
           send_json(response, 403, {
             ok: false,
-            error: "tool_not_allowed_for_role"
+            error: MCP_ERROR_CODES.TOOL_NOT_ALLOWED_FOR_ROLE
           });
           return;
         }
@@ -293,7 +289,7 @@ async function start_service() {
         if (tool_definition.requires_confirmation && !confirmed) {
           send_json(response, 409, {
             ok: false,
-            error: "confirmation_required"
+            error: MCP_ERROR_CODES.CONFIRMATION_REQUIRED
           });
           return;
         }
@@ -310,7 +306,7 @@ async function start_service() {
           requester_user_id: request_context.user_id || null,
           requester_team_id: request_context.team_id || null,
           requester_channel_id: request_context.channel_id || null,
-          arguments_hash: hash_arguments_payload(arguments_payload)
+          arguments_hash: hash_json_payload(arguments_payload)
         });
 
         send_json(response, 200, {
@@ -326,25 +322,25 @@ async function start_service() {
           stack: error?.stack
         });
 
-        if (error?.message === "request_body_too_large") {
+        if (error?.message === MCP_ERROR_CODES.REQUEST_BODY_TOO_LARGE) {
           send_json(response, 413, {
             ok: false,
-            error: "request_body_too_large"
+            error: MCP_ERROR_CODES.REQUEST_BODY_TOO_LARGE
           });
           return;
         }
 
-        if (error?.message === "invalid_json_body") {
+        if (error?.message === MCP_ERROR_CODES.INVALID_JSON_BODY) {
           send_json(response, 400, {
             ok: false,
-            error: "invalid_json_body"
+            error: MCP_ERROR_CODES.INVALID_JSON_BODY
           });
           return;
         }
 
         send_json(response, 500, {
           ok: false,
-          error: "internal_error"
+          error: MCP_ERROR_CODES.INTERNAL_ERROR
         });
         return;
       }
@@ -352,7 +348,7 @@ async function start_service() {
 
     send_json(response, 404, {
       ok: false,
-      error: "route_not_found"
+      error: MCP_ERROR_CODES.ROUTE_NOT_FOUND
     });
   });
 

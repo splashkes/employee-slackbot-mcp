@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import crypto from "node:crypto";
+import { hash_json_payload } from "@abcodex/shared/signing.js";
 
 function create_openai_client(api_key) {
   return new OpenAI({ apiKey: api_key });
@@ -66,10 +66,7 @@ function summarize_arguments_payload(arguments_payload) {
     arguments_payload && typeof arguments_payload === "object" ? arguments_payload : {};
 
   return {
-    arguments_hash: crypto
-      .createHash("sha256")
-      .update(JSON.stringify(normalized_payload))
-      .digest("hex"),
+    arguments_hash: hash_json_payload(normalized_payload),
     argument_keys: Object.keys(normalized_payload).sort()
   };
 }

@@ -1,35 +1,10 @@
-import fs from "node:fs";
-
-function load_allowed_tools_manifest(file_path) {
-  const raw_text = fs.readFileSync(file_path, "utf8");
-  const manifest = JSON.parse(raw_text);
-
-  if (!Array.isArray(manifest.tools)) {
-    throw new Error("Invalid allowed tools manifest: expected tools array");
-  }
-
-  return manifest;
-}
-
-function get_tool_definition_by_name(manifest, tool_name) {
-  return manifest.tools.find((tool_definition) => tool_definition.tool_name === tool_name);
-}
-
-function get_allowed_tools_for_role(manifest, role_name, enable_mutating_tools) {
-  return manifest.tools.filter((tool_definition) => {
-    const role_allowed = (tool_definition.allowed_roles || []).includes(role_name);
-
-    if (!role_allowed) {
-      return false;
-    }
-
-    if (tool_definition.risk_level === "high" && !enable_mutating_tools) {
-      return false;
-    }
-
-    return true;
-  });
-}
+export {
+  build_tool_index,
+  get_allowed_tools_for_role,
+  get_tool_definition_by_name,
+  is_tool_allowed_for_role,
+  load_allowed_tools_manifest
+} from "@abcodex/shared/tool_manifest.js";
 
 function is_identity_allowed(service_config, identity_context) {
   const { team_id, channel_id, user_id } = identity_context;
@@ -187,11 +162,8 @@ function truncate_text(raw_text, max_length) {
 
 export {
   FixedWindowRateLimiter,
-  get_allowed_tools_for_role,
-  get_tool_definition_by_name,
   is_confirmation_satisfied,
   is_identity_allowed,
-  load_allowed_tools_manifest,
   redact_text,
   truncate_text
 };
