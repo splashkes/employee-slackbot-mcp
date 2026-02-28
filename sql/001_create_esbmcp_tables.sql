@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_esbmcp_chat_sessions_status
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS esbmcp_tool_executions (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id      uuid        REFERENCES esbmcp_chat_sessions(id) ON DELETE SET NULL,
+  session_id      uuid,                        -- correlates to esbmcp_chat_sessions (no FK — session written after tools)
 
   -- Origin (denormalized for fast querying without joins)
   slack_user_id   text,
@@ -135,7 +135,7 @@ CREATE INDEX IF NOT EXISTS idx_esbmcp_tool_executions_domain
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS esbmcp_audit_log (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id      uuid        REFERENCES esbmcp_chat_sessions(id) ON DELETE SET NULL,
+  session_id      uuid,                        -- correlates to esbmcp_chat_sessions (no FK — session written after tools)
 
   -- Origin
   slack_user_id   text,
@@ -189,8 +189,8 @@ CREATE INDEX IF NOT EXISTS idx_esbmcp_audit_log_denials
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS esbmcp_tool_errors (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  execution_id    uuid        REFERENCES esbmcp_tool_executions(id) ON DELETE SET NULL,
-  session_id      uuid        REFERENCES esbmcp_chat_sessions(id) ON DELETE SET NULL,
+  execution_id    uuid,                        -- correlates to esbmcp_tool_executions (no FK)
+  session_id      uuid,                        -- correlates to esbmcp_chat_sessions (no FK)
 
   -- Origin
   slack_user_id   text,

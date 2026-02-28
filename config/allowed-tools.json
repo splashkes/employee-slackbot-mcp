@@ -4,7 +4,7 @@
   "tools": [
     {
       "tool_name": "lookup_event",
-      "description": "Look up event details by EID including venue, city, dates, currency, and status. Use when someone asks about an event, wants event info, or references an event ID like AB4001.",
+      "description": "Look up an Art Battle event by its EID (e.g. AB4003) or search for events by city name (e.g. Sydney, Toronto). Use city search when no EID is given.",
       "risk_level": "low",
       "domain": "data-read",
       "allowed_roles": [
@@ -26,11 +26,19 @@
           "eid": {
             "type": "string",
             "description": "Event identifier such as AB4001"
+          },
+          "city": {
+            "type": "string",
+            "description": "City name to search for events (e.g. Sydney, Toronto). Use when no eid is provided."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max events to return for city search (default 10, max 25)",
+            "minimum": 1,
+            "maximum": 25
           }
         },
-        "required": [
-          "eid"
-        ],
+        "required": [],
         "additionalProperties": false
       }
     },

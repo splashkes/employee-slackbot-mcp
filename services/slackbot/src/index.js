@@ -316,70 +316,84 @@ async function handle_prompt({
     max_output_tokens: service_config.openai.max_output_tokens,
     logger,
     tool_executor: async ({ tool_name, arguments_payload }) => {
-      const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
+      try {
+        const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
 
-      if (!tool_definition) {
-        throw new Error(`Tool is not allowlisted: ${tool_name}`);
-      }
-
-      const current_count = tool_call_counts.get(tool_name) || 0;
-      const next_count = current_count + 1;
-      const tool_max_calls =
-        Number(tool_definition.max_calls_per_request) > 0
-          ? tool_definition.max_calls_per_request
-          : service_config.mcp.max_tool_calls_per_request;
-
-      if (next_count > tool_max_calls) {
-        throw new Error(`Tool ${tool_name} exceeded max calls per request (${tool_max_calls})`);
-      }
-
-      tool_call_counts.set(tool_name, next_count);
-
-      // Interactive confirmation for non-low-risk tools
-      let confirmed_for_request = is_confirmed;
-      if (
-        tool_definition.risk_level !== RISK_LEVELS.LOW &&
-        !is_confirmed
-      ) {
-        if (confirm_fn) {
-          const user_confirmed = await confirm_fn(tool_name, tool_definition, arguments_payload);
-          if (!user_confirmed) {
-            return { error: `Action *${tool_name}* was cancelled by the user.`, cancelled: true };
-          }
-          confirmed_for_request = true;
-        } else {
-          throw new Error(
-            `Tool ${tool_name} requires explicit confirmation. Add the word CONFIRM in your request.`
-          );
+        if (!tool_definition) {
+          return { error: `Tool ${tool_name} is not available.` };
         }
+
+        const current_count = tool_call_counts.get(tool_name) || 0;
+        const next_count = current_count + 1;
+        const tool_max_calls =
+          Number(tool_definition.max_calls_per_request) > 0
+            ? tool_definition.max_calls_per_request
+            : service_config.mcp.max_tool_calls_per_request;
+
+        if (next_count > tool_max_calls) {
+          return { error: `Tool ${tool_name} has been called too many times in this request (max ${tool_max_calls}). Try a different approach or be more specific.` };
+        }
+
+        tool_call_counts.set(tool_name, next_count);
+
+        // Interactive confirmation for non-low-risk tools
+        let confirmed_for_request = is_confirmed;
+        if (
+          tool_definition.risk_level !== RISK_LEVELS.LOW &&
+          !is_confirmed
+        ) {
+          if (confirm_fn) {
+            const user_confirmed = await confirm_fn(tool_name, tool_definition, arguments_payload);
+            if (!user_confirmed) {
+              return { error: `Action *${tool_name}* was cancelled by the user.`, cancelled: true };
+            }
+            confirmed_for_request = true;
+          } else {
+            return { error: `Tool ${tool_name} requires confirmation. Add the word CONFIRM in your request.` };
+          }
+        }
+
+        const request_context = {
+          team_id: identity_context.team_id,
+          channel_id: identity_context.channel_id,
+          user_id: identity_context.user_id,
+          username: identity_context.username,
+          role: role_name,
+          confirmed: confirmed_for_request,
+          session_id
+        };
+
+        const tool_start = Date.now();
+        const result = await mcp_client.call_tool({
+          tool_name,
+          arguments_payload,
+          request_context
+        });
+        const tool_duration = Date.now() - tool_start;
+
+        tool_call_details.push({
+          tool_name,
+          arguments_hash: arguments_payload ? Object.keys(arguments_payload).sort().join(",") : "",
+          duration_ms: tool_duration,
+          ok: !result?.error
+        });
+
+        return result;
+      } catch (tool_error) {
+        logger.error("tool_executor_error", {
+          tool_name,
+          error_message: tool_error?.message
+        });
+
+        tool_call_details.push({
+          tool_name,
+          arguments_hash: arguments_payload ? Object.keys(arguments_payload).sort().join(",") : "",
+          duration_ms: 0,
+          ok: false
+        });
+
+        return { error: `Tool ${tool_name} failed: ${tool_error?.message || "unknown error"}` };
       }
-
-      const request_context = {
-        team_id: identity_context.team_id,
-        channel_id: identity_context.channel_id,
-        user_id: identity_context.user_id,
-        username: identity_context.username,
-        role: role_name,
-        confirmed: confirmed_for_request,
-        session_id
-      };
-
-      const tool_start = Date.now();
-      const result = await mcp_client.call_tool({
-        tool_name,
-        arguments_payload,
-        request_context
-      });
-      const tool_duration = Date.now() - tool_start;
-
-      tool_call_details.push({
-        tool_name,
-        arguments_hash: arguments_payload ? Object.keys(arguments_payload).sort().join(",") : "",
-        duration_ms: tool_duration,
-        ok: !result?.error
-      });
-
-      return result;
     }
   });
 

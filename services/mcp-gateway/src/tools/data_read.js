@@ -1,7 +1,28 @@
 // data_read domain — 15 read-only SQL tools
 // Skills: 1-5, 17-20, 22-24, 28-30
 
-async function lookup_event({ eid }, sql) {
+async function lookup_event({ eid, city, limit }, sql) {
+  // Search by city name if no eid provided
+  if (!eid && city) {
+    const max_rows = Math.min(limit || 10, 25);
+    const rows = await sql`
+      SELECT
+        e.id, e.eid, e.name, e.event_start_datetime, e.event_end_datetime,
+        e.enabled, e.currency, e.show_in_app, e.event_level,
+        e.city_id, c.name AS city_name, c.country_id,
+        e.venue_id, v.name AS venue_name
+      FROM events e
+      LEFT JOIN cities c ON c.id = e.city_id
+      LEFT JOIN venues v ON v.id = e.venue_id
+      WHERE c.name ILIKE ${'%' + city + '%'}
+      ORDER BY e.event_start_datetime DESC
+      LIMIT ${max_rows}
+    `;
+    return { events: rows, count: rows.length, search: { city } };
+  }
+
+  if (!eid) return { error: "Provide either an eid (e.g. AB4003) or a city name." };
+
   const rows = await sql`
     SELECT
       e.id, e.eid, e.name, e.event_start_datetime, e.event_end_datetime,
@@ -136,7 +157,8 @@ async function lookup_artwork_bids({ eid, artist_profile_id }, sql) {
 }
 
 async function get_vote_data({ eid, round }, sql) {
-  const round_filter = round ? sql`AND rc.round_id = ${round}::uuid` : sql``;
+  const round_num = round ? Number(round) : null;
+  const round_filter = round_num ? sql`AND a.round = ${round_num}` : sql``;
 
   const votes = await sql`
     SELECT v.id, v.person_id, v.art_id, v.created_at,
@@ -147,7 +169,6 @@ async function get_vote_data({ eid, round }, sql) {
     JOIN art a ON a.id = v.art_uuid
     JOIN events e ON e.id = a.event_id
     LEFT JOIN artist_profiles ap ON ap.id = a.artist_id
-    LEFT JOIN round_contestants rc ON rc.art_id = a.id
     LEFT JOIN vote_weights vw ON vw.person_id = v.person_id AND vw.event_id = v.event_id
     WHERE e.eid = ${eid} ${round_filter}
     ORDER BY a.round, v.created_at DESC
@@ -162,7 +183,6 @@ async function get_vote_data({ eid, round }, sql) {
     FROM votes v
     JOIN art a ON a.id = v.art_uuid
     JOIN events e ON e.id = a.event_id
-    LEFT JOIN round_contestants rc ON rc.art_id = a.id
     LEFT JOIN vote_weights vw ON vw.person_id = v.person_id AND vw.event_id = v.event_id
     WHERE e.eid = ${eid} ${round_filter}
     GROUP BY a.round
