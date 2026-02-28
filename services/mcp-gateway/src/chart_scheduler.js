@@ -62,8 +62,8 @@ function create_chart_scheduler({ sql, config, slack_poster }) {
 
       // Fetch fresh EB data
       const eb = config.eventbrite;
-      if (!eb.api_token) {
-        throw new Error("EVENTBRITE_API_TOKEN not configured");
+      if (!eb.private_token && !eb.api_key) {
+        throw new Error("EB_PRIVATE_TOKEN not configured");
       }
 
       // Get cached attendee data (refresh if stale > 6h)

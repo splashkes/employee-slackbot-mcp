@@ -49,8 +49,11 @@ const service_config = {
     branch: process.env.REPO_BRANCH || "main"
   },
   eventbrite: {
-    api_token: process.env.EVENTBRITE_API_TOKEN || "",
-    org_id: process.env.EVENTBRITE_ORG_ID || "",
+    api_key: process.env.EB_API_KEY || "",
+    client_secret: process.env.EB_CLIENT_SECRET || "",
+    private_token: process.env.EB_PRIVATE_TOKEN || "",
+    public_token: process.env.EB_PUBLIC_TOKEN || "",
+    org_id: process.env.EB_ORG_ID || "",
     rate_limit_ms: parse_number(process.env.EVENTBRITE_RATE_LIMIT_MS, 200)
   },
   slack: {

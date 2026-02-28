@@ -8,12 +8,16 @@ import crypto from "node:crypto";
 
 const EB_BASE = "https://www.eventbriteapi.com/v3";
 
-async function eb_fetch(path, api_token, rate_limit_ms) {
+async function eb_fetch(path, eb_config, rate_limit_ms) {
   if (rate_limit_ms > 0) {
     await new Promise((r) => setTimeout(r, rate_limit_ms));
   }
+  const token = eb_config.private_token || eb_config.api_key;
   const res = await fetch(`${EB_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${api_token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(eb_config.api_key ? { "X-Eventbrite-Api-Key": eb_config.api_key } : {})
+    },
     signal: AbortSignal.timeout(15_000)
   });
   if (!res.ok) {
@@ -25,13 +29,13 @@ async function eb_fetch(path, api_token, rate_limit_ms) {
   return res.json();
 }
 
-async function eb_fetch_paginated(path, api_token, rate_limit_ms, collection_key, max_pages = 20) {
+async function eb_fetch_paginated(path, eb_config, rate_limit_ms, collection_key, max_pages = 20) {
   const items = [];
   let page = 1;
   let has_more = true;
   while (has_more && page <= max_pages) {
     const sep = path.includes("?") ? "&" : "?";
-    const data = await eb_fetch(`${path}${sep}page=${page}`, api_token, rate_limit_ms);
+    const data = await eb_fetch(`${path}${sep}page=${page}`, eb_config, rate_limit_ms);
     const page_items = data[collection_key] || [];
     items.push(...page_items);
     has_more = data.pagination?.has_more_items === true;
@@ -282,7 +286,7 @@ function hash_chart_config(config) {
 
 async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
   const eb = config.eventbrite;
-  if (!eb.api_token) return { error: "EVENTBRITE_API_TOKEN not configured" };
+  if (!eb.private_token && !eb.api_key) return { error: "EB_PRIVATE_TOKEN not configured" };
 
   // Resolve eventbrite_id from event
   const events = await sql`
@@ -318,14 +322,14 @@ async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
   }
 
   // Fetch from Eventbrite API
-  const eb_event = await eb_fetch(`/events/${event.eventbrite_id}/`, eb.api_token, eb.rate_limit_ms);
+  const eb_event = await eb_fetch(`/events/${event.eventbrite_id}/`, eb, eb.rate_limit_ms);
   const ticket_classes = await eb_fetch(
     `/events/${event.eventbrite_id}/ticket_classes/`,
-    eb.api_token, eb.rate_limit_ms
+    eb, eb.rate_limit_ms
   );
   const attendees = await eb_fetch_paginated(
     `/events/${event.eventbrite_id}/attendees/`,
-    eb.api_token, eb.rate_limit_ms,
+    eb, eb.rate_limit_ms,
     "attendees", 20
   );
 
@@ -399,13 +403,13 @@ async function verify_eventbrite_config({ eid }, sql, _edge, config) {
   };
 
   // Check token
-  if (!eb.api_token) {
-    result.issues.push("EVENTBRITE_API_TOKEN is not set");
+  if (!eb.private_token && !eb.api_key) {
+    result.issues.push("EB_PRIVATE_TOKEN is not set");
     return result;
   }
 
   try {
-    const me = await eb_fetch("/users/me/", eb.api_token, 0);
+    const me = await eb_fetch("/users/me/", eb, 0);
     result.token_valid = true;
     result.user_name = me.name;
     result.user_email = me.emails?.[0]?.email;
@@ -417,7 +421,7 @@ async function verify_eventbrite_config({ eid }, sql, _edge, config) {
   // Check org access
   if (eb.org_id) {
     try {
-      await eb_fetch(`/organizations/${eb.org_id}/`, eb.api_token, eb.rate_limit_ms);
+      await eb_fetch(`/organizations/${eb.org_id}/`, eb, eb.rate_limit_ms);
       result.org_accessible = true;
     } catch (err) {
       result.issues.push(`Org ${eb.org_id} not accessible: ${err.message}`);
@@ -449,7 +453,7 @@ async function verify_eventbrite_config({ eid }, sql, _edge, config) {
 
   // Check event reachable
   try {
-    const ev = await eb_fetch(`/events/${events[0].eventbrite_id}/`, eb.api_token, eb.rate_limit_ms);
+    const ev = await eb_fetch(`/events/${events[0].eventbrite_id}/`, eb, eb.rate_limit_ms);
     result.event_reachable = true;
     result.event_name = ev.name?.text;
     result.event_status = ev.status;
@@ -665,7 +669,7 @@ async function set_chart_comparators({ eid, comparator_eids }, sql) {
 
 async function generate_chart({ eid, include_comparators, comparator_eids }, sql, _edge, config) {
   const eb = config.eventbrite;
-  if (!eb.api_token) return { error: "EVENTBRITE_API_TOKEN not configured" };
+  if (!eb.private_token && !eb.api_key) return { error: "EB_PRIVATE_TOKEN not configured" };
 
   // Get target event
   const events = await sql`
