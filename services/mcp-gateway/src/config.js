@@ -58,6 +58,9 @@ const service_config = {
   },
   slack: {
     bot_token: process.env.SLACK_BOT_TOKEN || ""
+  },
+  rag: {
+    query_url: process.env.RAG_QUERY_URL || "http://rag-query.artbattle-orchestration.svc.cluster.local:8082"
   }
 };
 

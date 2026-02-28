@@ -1993,6 +1993,80 @@
         "required": ["scope_type", "scope_id"],
         "additionalProperties": false
       }
+    },
+    {
+      "tool_name": "search_slack_knowledge",
+      "description": "Search historical Slack conversations using semantic search. Returns messages ranked by relevance with surrounding context and thread previews. Use when someone asks about past discussions, decisions, or what was said about a topic in Slack. Provide channel or user filters to narrow results. Results include permalinks back to original Slack messages.",
+      "risk_level": "low",
+      "domain": "slack-knowledge",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "marketing"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 3,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language search query (e.g. 'venue issues in Toronto', 'budget discussion for Q4')",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max results to return (default 10, max 25)",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "channel": {
+            "type": "string",
+            "description": "Filter by Slack channel name (e.g. 'toronto', 'general')"
+          },
+          "user": {
+            "type": "string",
+            "description": "Filter by user display name"
+          },
+          "start_date": {
+            "type": "string",
+            "description": "Start date filter (YYYY-MM-DD)"
+          },
+          "end_date": {
+            "type": "string",
+            "description": "End date filter (YYYY-MM-DD)"
+          },
+          "include_thread_context": {
+            "type": "boolean",
+            "description": "Include thread replies in results (default: true)"
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_slack_knowledge_stats",
+      "description": "Get statistics about the Slack knowledge index — number of indexed channels, messages, files, and the embedding model used. Use when someone asks about the Slack archive coverage or index health.",
+      "risk_level": "low",
+      "domain": "slack-knowledge",
+      "allowed_roles": [
+        "ops"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
     }
   ]
 }

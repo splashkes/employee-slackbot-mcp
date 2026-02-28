@@ -242,7 +242,7 @@ async function start_service() {
     ) {
       const tool_name = decodeURIComponent(path_segments[2]);
       const request_start_ms = Date.now();
-      const safe_preview_keys = ["eid", "round", "group_by", "search_by", "status", "hours_back", "audience_filter", "table_name", "limit", "title", "description", "priority", "related_eid", "force", "cadence", "action", "include_comparators", "slack_channel_id", "force_rescore"];
+      const safe_preview_keys = ["eid", "round", "group_by", "search_by", "status", "hours_back", "audience_filter", "table_name", "limit", "title", "description", "priority", "related_eid", "force", "cadence", "action", "include_comparators", "slack_channel_id", "force_rescore", "query", "channel", "user", "start_date", "end_date", "include_thread_context"];
 
       let parsed_request = null;
       let tool_definition = null;

@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-query
+  namespace: artbattle-orchestration
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Single replica with emptyDir — no rolling update needed
+  selector:
+    matchLabels:
+      app: rag-query
+  template:
+    metadata:
+      labels:
+        app: rag-query
+        plane: orchestration
+    spec:
+      serviceAccountName: rag-query-sa
+      imagePullSecrets:
+        - name: esbmcp
+      containers:
+        # ── rag-query Python service ──────────────────────────────────
+        - name: rag-query
+          image: registry.digitalocean.com/esbmcp/rag-query:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8082
+              name: http
+          env:
+            - name: RAG_INDEX_DIR
+              value: /data/rag-index
+            - name: OLLAMA_HOST
+              value: http://localhost:11434
+            - name: PORT
+              value: "8082"
+            - name: LOG_LEVEL
+              value: info
+          envFrom:
+            - secretRef:
+                name: rag-query-secrets
+          volumeMounts:
+            - name: rag-index
+              mountPath: /data/rag-index
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30   # 5+ min tolerance for artifact download + Qdrant init
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 250m
+            limits:
+              memory: 2Gi
+              cpu: "1"
+        # ── Ollama embedding sidecar (pod-internal only) ──────────────
+        # No containerPort exposed — only reachable via localhost:11434
+        # within the pod. NetworkPolicy blocks all external access.
+        - name: ollama
+          image: registry.digitalocean.com/esbmcp/ollama-qwen3:latest
+          imagePullPolicy: Always
+          # No ports section — Ollama is NOT exposed to the pod network.
+          # Only reachable from other containers in this pod via localhost.
+          env:
+            - name: OLLAMA_HOST
+              value: 0.0.0.0:11434
+          volumeMounts:
+            - name: ollama-data
+              mountPath: /root/.ollama
+          resources:
+            requests:
+              memory: 3Gi
+              cpu: 500m
+            limits:
+              memory: 4Gi
+              cpu: "2"
+      volumes:
+        - name: rag-index
+          emptyDir:
+            sizeLimit: 8Gi
+        - name: ollama-data
+          emptyDir:
+            sizeLimit: 6Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rag-query-sa
+  namespace: artbattle-orchestration

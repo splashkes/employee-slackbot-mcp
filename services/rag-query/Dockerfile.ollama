@@ -1,0 +1,11 @@
+FROM ollama/ollama:latest
+
+# Pre-pull the embedding model at build time to avoid runtime download
+RUN ollama serve & \
+    sleep 5 && \
+    ollama pull qwen3-embedding && \
+    kill %1 2>/dev/null || true
+
+EXPOSE 11434
+
+CMD ["serve"]

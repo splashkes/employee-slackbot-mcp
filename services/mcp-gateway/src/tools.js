@@ -12,6 +12,7 @@ import { growth_marketing_tools } from "./tools/growth_marketing.js";
 import { platform_ops_tools } from "./tools/platform_ops.js";
 import { eventbrite_charts_tools } from "./tools/eventbrite_charts.js";
 import { memory_tools } from "./tools/memory.js";
+import { slack_knowledge_tools } from "./tools/slack_knowledge.js";
 
 // Unified tool registry — all domain modules merged into a single lookup map
 const tool_registry = {
@@ -21,7 +22,8 @@ const tool_registry = {
   ...growth_marketing_tools,
   ...platform_ops_tools,
   ...eventbrite_charts_tools,
-  ...memory_tools
+  ...memory_tools,
+  ...slack_knowledge_tools
 };
 
 function validate_value_against_schema(value, schema, path_label) {

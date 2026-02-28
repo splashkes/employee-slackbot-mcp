@@ -16,6 +16,10 @@ Owner: Platform Engineering
 - `orchestration-api` = **Slackbot** (built from `services/slackbot/Dockerfile`)
 - `orchestration-supervisor` = **MCP Gateway** (built from `services/mcp-gateway/Dockerfile`)
 
+| `rag-query` | `rag-query:latest` + `ollama-qwen3:latest` | RAG Query | 8082 | Slack knowledge search (semantic), Ollama embedding sidecar |
+
+See [docs/rag-query-service.md](rag-query-service.md) for full RAG service documentation.
+
 ### Execution Plane (deferred — replicas: 0)
 
 1. `runner-data-read`
@@ -24,7 +28,7 @@ Owner: Platform Engineering
 4. `runner-growth-marketing`
 5. `runner-platform-db-edge`
 
-All 48 tools are served directly by the MCP gateway. Runners are reserved for future async agent work.
+All 67 tools are served directly by the MCP gateway. Runners are reserved for future async agent work.
 
 ## 2. Infrastructure
 
@@ -57,9 +61,11 @@ doctl registry repo list-v2
 
 ### Registry Management
 
-The free tier has a **2-repository limit**. Both repos are used:
+The registry is on the **Basic plan** ($5/mo, 5-repo limit). Four repos are in use:
 - `orchestration-api` — Slackbot image
 - `orchestration-supervisor` — MCP Gateway image
+- `rag-query` — RAG query service image
+- `ollama-qwen3` — Ollama embedding sidecar image
 
 ```bash
 # List repos and tags
@@ -192,6 +198,9 @@ kubectl rollout restart deployment/orchestration-api deployment/orchestration-su
 | payments | 9 | `src/tools/payments.js` | 2 write-gated; uses production balance formula |
 | growth-marketing | 7 | `src/tools/growth_marketing.js` | All read-only |
 | platform-db-edge | 7 | `src/tools/platform_ops.js` | Includes bot introspection + bug reports |
+| eventbrite-charts | 10 | `src/tools/eventbrite_charts.js` | Ticket pace charts + autopost scheduler |
+| memory | 4 | `src/tools/memory.js` | Per-channel/tool memory with versioning |
+| slack-knowledge | 2 | `src/tools/slack_knowledge.js` | Semantic search over Slack archive (via rag-query sidecar) |
 
 ## 7. RBAC
 

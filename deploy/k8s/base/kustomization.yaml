@@ -7,6 +7,7 @@ resources:
   - orchestration-api-deployment.yaml
   - orchestration-supervisor-deployment.yaml
   - execution-runners-deployments.yaml
+  - rag-query-deployment.yaml
   - networkpolicy.yaml
   # ingress.yaml — not needed when using Socket Mode; re-add for Events API mode
 

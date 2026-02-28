@@ -32,6 +32,8 @@ spec:
               value: production
             - name: PORT
               value: "8081"
+            - name: RAG_QUERY_URL
+              value: http://rag-query.artbattle-orchestration.svc.cluster.local:8082
           readinessProbe:
             httpGet:
               path: /readyz

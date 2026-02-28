@@ -128,6 +128,55 @@ spec:
           port: 25061
 ---
 # ---------------------------------------------------------------------------
+# rag-query ingress: ONLY allow orchestration-supervisor → rag-query:8082
+# Ollama (11434) is NOT exposed — no containerPort, no Service, and this
+# policy explicitly limits ingress to port 8082 only. Any external attempt
+# to reach 11434 is blocked by default-deny-all + this whitelist.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-query-ingress
+  namespace: artbattle-orchestration
+spec:
+  podSelector:
+    matchLabels:
+      app: rag-query
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: orchestration-supervisor
+      ports:
+        - protocol: TCP
+          port: 8082
+---
+# ---------------------------------------------------------------------------
+# orchestration-supervisor egress to rag-query:8082
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: supervisor-to-rag-query-egress
+  namespace: artbattle-orchestration
+spec:
+  podSelector:
+    matchLabels:
+      app: orchestration-supervisor
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rag-query
+      ports:
+        - protocol: TCP
+          port: 8082
+---
+# ---------------------------------------------------------------------------
 # Execution egress: allow HTTPS, DNS, Postgres, and managed Redis (port 25061)
 # ---------------------------------------------------------------------------
 apiVersion: networking.k8s.io/v1
