@@ -227,10 +227,20 @@ async function render_chart({ target_event, target_timeline, comparators }) {
   }
 
   const qc_data = await qc_response.json();
+
+  // Download the actual PNG so we can upload it to Slack
+  const image_response = await fetch(qc_data.url, {
+    signal: AbortSignal.timeout(15_000)
+  });
+  if (!image_response.ok) {
+    throw new Error(`Failed to download chart image: ${image_response.status}`);
+  }
+  const image_buffer = Buffer.from(await image_response.arrayBuffer());
   const render_duration_ms = Date.now() - render_start;
 
   return {
     chart_url: qc_data.url,
+    image_buffer,
     chart_config,
     render_duration_ms
   };
@@ -791,11 +801,12 @@ async function generate_chart({ eid, include_comparators, comparator_eids }, sql
   }
 
   // Render chart
-  const { chart_url, chart_config, render_duration_ms } = await render_chart({
+  const render_result = await render_chart({
     target_event: event,
     target_timeline,
     comparators
   });
+  const { chart_url, image_buffer, chart_config, render_duration_ms } = render_result;
 
   // Compute pace
   const days_range = target_timeline.length > 0
@@ -824,6 +835,7 @@ async function generate_chart({ eid, include_comparators, comparator_eids }, sql
   return {
     eid,
     chart_url,
+    image_buffer,
     ticket_count,
     revenue,
     pace_per_day,

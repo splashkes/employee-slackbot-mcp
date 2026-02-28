@@ -172,7 +172,7 @@ function create_chart_scheduler({ sql, config, slack_poster }) {
       }
 
       // Render chart
-      const { chart_url, chart_config, render_duration_ms } = await render_chart({
+      const { chart_url, image_buffer, chart_config, render_duration_ms } = await render_chart({
         target_event: { eid: job.eid, name: job.event_name },
         target_timeline: timeline,
         comparators
@@ -193,19 +193,22 @@ function create_chart_scheduler({ sql, config, slack_poster }) {
         return;
       }
 
-      // Post to Slack
+      // Upload chart to Slack
       const days_until = timeline[timeline.length - 1]?.days_until_event;
       const comparator_label = comparators.length > 0
         ? ` vs ${comparators.map((c) => c.eid).join(", ")}`
         : "";
-      const slack_text = `*${job.eid}* — ${job.event_name}\n` +
+      const slack_comment = `*${job.eid}* — ${job.event_name}\n` +
         `Tickets: *${ticket_count}* · Pace: *${pace_per_day}/day*` +
         (days_until != null ? ` · *${days_until} days* until event` : "") +
-        comparator_label + `\n${chart_url}`;
+        comparator_label;
 
-      const slack_result = await slack_poster.post_message({
+      const slack_result = await slack_poster.upload_file({
         channel: job.slack_channel_id,
-        text: slack_text
+        image_buffer,
+        filename: `${job.eid}-ticket-pace-${new Date().toISOString().slice(0, 10)}.png`,
+        title: `Ticket Pace: ${job.eid} — ${job.event_name}`,
+        initial_comment: slack_comment
       });
 
       // Log success
@@ -218,7 +221,7 @@ function create_chart_scheduler({ sql, config, slack_poster }) {
           ${job.id}, ${job.eid}, ${chart_url}, ${payload_hash},
           ${JSON.stringify(comparators.map((c) => ({ eid: c.eid, name: c.name, city: c.city })))},
           ${ticket_count}, ${revenue}, ${pace_per_day}, ${days_until},
-          ${slack_result.ts}, ${render_duration_ms}
+          ${slack_result.file_id || null}, ${render_duration_ms}
         )
       `;
 
