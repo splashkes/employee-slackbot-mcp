@@ -302,6 +302,28 @@ async function handle_prompt({
 
   session_writer.write_audit_event({ ...origin, event_type: "session_started", detail: { tools_available: role_allowed_tools.length } });
 
+  // Load channel memory (lazy — only if memory exists for this channel)
+  let channel_context = null;
+  try {
+    const memory_result = await mcp_client.call_tool({
+      tool_name: "get_memory",
+      arguments_payload: { scope_type: "channel", scope_id: identity_context.channel_id },
+      request_context: {
+        team_id: identity_context.team_id,
+        channel_id: identity_context.channel_id,
+        user_id: identity_context.user_id,
+        role: role_name,
+        session_id
+      }
+    });
+    const mem = memory_result?.result;
+    if (mem && !mem.is_empty && mem.content_md) {
+      channel_context = mem.content_md;
+    }
+  } catch (err) {
+    logger.warn("channel_memory_load_failed", { channel: identity_context.channel_id, error: err?.message });
+  }
+
   const started_at_ms = Date.now();
   const tool_call_counts = new Map();
   const tool_call_details = [];
@@ -315,6 +337,7 @@ async function handle_prompt({
     max_tool_calls: service_config.mcp.max_tool_calls_per_request,
     max_output_tokens: service_config.openai.max_output_tokens,
     logger,
+    channel_context,
     tool_executor: async ({ tool_name, arguments_payload }) => {
       const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
 
@@ -436,7 +459,102 @@ async function handle_prompt({
     }
   });
 
+  // Fire-and-forget: update channel memory if conversation had substance
+  if (tool_call_details.length > 0) {
+    update_channel_memory_after_session({
+      openai_client,
+      mcp_client,
+      channel_id: identity_context.channel_id,
+      channel_context,
+      user_prompt: normalized_prompt,
+      ai_response: final_response,
+      tools_used: tool_call_details.map((t) => t.tool_name),
+      session_id,
+      role_name,
+      identity_context
+    }).catch((err) => {
+      logger.warn("memory_update_failed", { channel: identity_context.channel_id, error: err?.message });
+    });
+  }
+
   return final_response;
+}
+
+// ---------------------------------------------------------------------------
+// Post-session memory update (fire-and-forget)
+// Uses a cheap gpt-4o-mini call to decide if the conversation contained
+// durable facts worth persisting to channel memory.
+// ---------------------------------------------------------------------------
+async function update_channel_memory_after_session({
+  openai_client, mcp_client, channel_id, channel_context,
+  user_prompt, ai_response, tools_used, session_id, role_name, identity_context
+}) {
+  const current_memory = channel_context || "";
+
+  const memory_prompt = [
+    "You maintain a contextual memory for a Slack channel. Below is the current memory and a conversation that just happened.",
+    "Output an updated memory following the exact template format below, or output exactly UNCHANGED if nothing worth remembering.",
+    "",
+    "Rules:",
+    "• Only store DURABLE facts: who does what, recurring topics, resolved problems, learned preferences, open issues.",
+    "• Do NOT store: one-off data lookups, transient numbers, anything already in the database.",
+    "• Keep under 2200 characters total.",
+    "• Update existing entries rather than duplicating.",
+    "• Add (Mon YYYY) date suffix to new/updated entries for staleness tracking.",
+    "• Drop entries not referenced in 30+ days when space is needed.",
+    "• Keep the <!-- MEMORY INSTRUCTIONS --> block intact at the top.",
+    "",
+    "CURRENT MEMORY:",
+    current_memory || "(empty — this is a new channel memory)",
+    "",
+    "CONVERSATION:",
+    `User: ${user_prompt}`,
+    `Tools used: ${tools_used.join(", ")}`,
+    `Assistant: ${ai_response.slice(0, 500)}`,
+    "",
+    "Output the full updated memory (including instructions block and all section headings), or UNCHANGED:"
+  ].join("\n");
+
+  const response = await openai_client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: memory_prompt }],
+    max_tokens: 800
+  });
+
+  const output = response.choices?.[0]?.message?.content?.trim();
+  if (!output || output === "UNCHANGED" || output.length < 20) {
+    return;
+  }
+
+  // Hard cap check
+  if (output.length > 4000) {
+    return;
+  }
+
+  // Extract change summary (first line or auto-generate)
+  const first_meaningful_line = output.split("\n").find((l) =>
+    l.trim() && !l.startsWith("<!--") && !l.startsWith("##") && !l.startsWith("-->")
+  );
+  const change_summary = first_meaningful_line
+    ? `Auto: ${first_meaningful_line.slice(0, 80)}`
+    : "Auto-updated from session";
+
+  await mcp_client.call_tool({
+    tool_name: "update_memory",
+    arguments_payload: {
+      scope_type: "channel",
+      scope_id: channel_id,
+      content_md: output,
+      change_summary
+    },
+    request_context: {
+      team_id: identity_context.team_id,
+      channel_id,
+      user_id: identity_context.user_id,
+      role: role_name,
+      session_id
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------

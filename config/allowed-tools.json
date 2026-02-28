@@ -1853,6 +1853,146 @@
         },
         "additionalProperties": false
       }
+    },
+    {
+      "tool_name": "get_memory",
+      "description": "Load contextual memory for a Slack channel or tool. Channel memory contains known people, recurring topics, problems/solutions, and open items for that channel. Tool memory contains known patterns, issues, and parameter hints for a specific tool. Use when you need context about the current channel or when encountering issues with a tool.",
+      "risk_level": "low",
+      "domain": "memory",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "marketing",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 3,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "scope_type": {
+            "type": "string",
+            "enum": ["channel", "tool"],
+            "description": "Memory scope: 'channel' for Slack channel context, 'tool' for tool-specific patterns"
+          },
+          "scope_id": {
+            "type": "string",
+            "description": "Slack channel ID (for channel scope) or tool name (for tool scope)"
+          }
+        },
+        "required": ["scope_type", "scope_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "update_memory",
+      "description": "Write an updated version of channel or tool memory. The content_md must follow the memory template format with section headings. Each write creates a new version (never overwrites). Used automatically after sessions to persist learned context.",
+      "risk_level": "medium",
+      "domain": "memory",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "marketing",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "scope_type": {
+            "type": "string",
+            "enum": ["channel", "tool"],
+            "description": "Memory scope"
+          },
+          "scope_id": {
+            "type": "string",
+            "description": "Slack channel ID or tool name"
+          },
+          "content_md": {
+            "type": "string",
+            "description": "Full updated memory content in markdown template format"
+          },
+          "change_summary": {
+            "type": "string",
+            "description": "Brief summary of what changed (e.g. 'Added John as Toronto producer')"
+          }
+        },
+        "required": ["scope_type", "scope_id", "content_md"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "rollback_memory",
+      "description": "Rollback channel or tool memory to a previous version. Creates a new version with the old content (never mutates history). Use when a memory update was incorrect or corrupted.",
+      "risk_level": "medium",
+      "domain": "memory",
+      "allowed_roles": [
+        "ops"
+      ],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "scope_type": {
+            "type": "string",
+            "enum": ["channel", "tool"],
+            "description": "Memory scope"
+          },
+          "scope_id": {
+            "type": "string",
+            "description": "Slack channel ID or tool name"
+          },
+          "target_version": {
+            "type": "integer",
+            "description": "Version number to rollback to (default: previous version)",
+            "minimum": 1
+          }
+        },
+        "required": ["scope_type", "scope_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_memory_versions",
+      "description": "List version history for a channel or tool memory. Shows version numbers, change summaries, sizes, and whether each version was a rollback. Use when someone asks about memory history or wants to review changes.",
+      "risk_level": "low",
+      "domain": "memory",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "scope_type": {
+            "type": "string",
+            "enum": ["channel", "tool"],
+            "description": "Memory scope"
+          },
+          "scope_id": {
+            "type": "string",
+            "description": "Slack channel ID or tool name"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max versions to return (default 10, max 25)",
+            "minimum": 1,
+            "maximum": 25
+          }
+        },
+        "required": ["scope_type", "scope_id"],
+        "additionalProperties": false
+      }
     }
   ]
 }

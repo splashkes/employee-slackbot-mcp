@@ -87,9 +87,14 @@ async function run_openai_tool_routing({
   max_tool_calls,
   max_output_tokens,
   tool_executor,
-  logger
+  logger,
+  channel_context
 }) {
-  const system_prompt = [
+  // System prompt ordered for prompt caching: static content at the top (cached
+  // across all calls), then semi-static domain guidance, then per-channel memory
+  // at the bottom (changes least frequently → most frequently, top → bottom).
+  const static_prompt = [
+    // ── STATIC BLOCK (identical across every call — always cached) ─────────
     "You are Art Battle's internal operations assistant. Employees ask you questions in plain language — your job is to understand what they need and use the right tools to get them answers.",
     "",
     "SKILL SELECTION: The employee does NOT need to know which tools exist. They describe their problem naturally (e.g. 'why can't people see AB4023?' or 'how much did we make at the Toronto event?') and you select the appropriate tool(s).",
@@ -129,13 +134,23 @@ async function run_openai_tool_routing({
     "• Keep responses concise — Slack messages should be scannable, not walls of text. For large result sets (20+ items), present a summary with totals and the top entries rather than listing every single row.",
     "• STRUCTURE: Always start your response with a single-line summary (e.g. '*AB4003* — Toronto, Jan 15, 2025 · 3 rounds · 12 artworks'). Put detailed data on subsequent lines. This first line may be shown as a preview in the channel with full details in a thread.",
     "",
+    // ── DOMAIN GUIDANCE (changes only on deploy — still cached) ────────────
     "EVENTBRITE CHARTS:",
     "• When asked about ticket sales, ticket pace, or chart requests: first check cache freshness with get_eventbrite_data. If stale (>6h), call refresh_eventbrite_data before generating the chart.",
     "• Use generate_chart to create ticket sales pace charts. It auto-refreshes stale data and picks comparators.",
     "• For ongoing tracking, suggest schedule_chart_autopost so charts auto-post to the channel on a schedule.",
     "• Use verify_eventbrite_config to diagnose Eventbrite connectivity issues.",
-    "• Chart URLs from QuickChart.io are temporary (~30 days). The chart image will unfurl directly in Slack."
+    "• Charts are uploaded as images directly to Slack.",
+    "",
+    "TOOL MEMORY:",
+    "• If you encounter unexpected errors or issues with a tool, call get_memory with scope_type='tool' and scope_id=<tool_name> to check for known patterns and workarounds.",
+    "• Do not proactively load tool memories — only load them when you hit an issue or need context about a specific tool's quirks."
   ].join("\n");
+
+  // ── PER-CHANNEL CONTEXT (appended at the end — varies per channel) ──────
+  const system_prompt = channel_context
+    ? static_prompt + "\n\n" + "CHANNEL CONTEXT (from memory — use this to inform your responses):\n" + channel_context
+    : static_prompt;
 
   const messages = [
     {

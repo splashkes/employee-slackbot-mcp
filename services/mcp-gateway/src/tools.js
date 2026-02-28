@@ -11,6 +11,7 @@ import { payments_tools } from "./tools/payments.js";
 import { growth_marketing_tools } from "./tools/growth_marketing.js";
 import { platform_ops_tools } from "./tools/platform_ops.js";
 import { eventbrite_charts_tools } from "./tools/eventbrite_charts.js";
+import { memory_tools } from "./tools/memory.js";
 
 // Unified tool registry — all domain modules merged into a single lookup map
 const tool_registry = {
@@ -19,7 +20,8 @@ const tool_registry = {
   ...payments_tools,
   ...growth_marketing_tools,
   ...platform_ops_tools,
-  ...eventbrite_charts_tools
+  ...eventbrite_charts_tools,
+  ...memory_tools
 };
 
 function validate_value_against_schema(value, schema, path_label) {
