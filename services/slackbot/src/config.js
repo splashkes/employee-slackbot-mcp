@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -149,12 +148,6 @@ function assert_required_config() {
 
   if (missing_fields.length > 0) {
     throw new Error(`Missing required environment variables: ${missing_fields.join(", ")}`);
-  }
-
-  if (!fs.existsSync(service_config.policy.allowed_tools_file)) {
-    throw new Error(
-      `Allowed tools file not found: ${service_config.policy.allowed_tools_file}`
-    );
   }
 }
 

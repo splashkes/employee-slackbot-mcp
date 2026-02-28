@@ -36,8 +36,9 @@ async function call_mcp_tool({
   const controller = new AbortController();
   const timeout_handle = setTimeout(() => controller.abort(), timeout_ms);
 
-  const request_url = `${gateway_url.replace(/\/$/, "")}/v1/tools/${encodeURIComponent(tool_name)}`;
-  const request_pathname = new URL(request_url).pathname;
+  const encoded_tool_name = encodeURIComponent(tool_name);
+  const request_url = `${gateway_url.replace(/\/$/, "")}/v1/tools/${encoded_tool_name}`;
+  const request_pathname = `/v1/tools/${encoded_tool_name}`;
   const request_body_text = JSON.stringify({
     arguments: arguments_payload,
     request_context

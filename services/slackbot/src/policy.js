@@ -62,8 +62,21 @@ function is_confirmation_satisfied(user_prompt_text) {
 }
 
 class FixedWindowRateLimiter {
-  constructor() {
+  constructor({ sweep_interval_ms = 5 * 60 * 1000 } = {}) {
     this.state_map = new Map();
+    this._sweep_handle = setInterval(() => this._sweep(), sweep_interval_ms);
+    if (this._sweep_handle.unref) {
+      this._sweep_handle.unref();
+    }
+  }
+
+  _sweep() {
+    const now_ms = Date.now();
+    for (const [key, state] of this.state_map) {
+      if (now_ms - state.window_start_ms >= state.window_ms) {
+        this.state_map.delete(key);
+      }
+    }
   }
 
   consume(key, max_count, window_sec) {
@@ -75,6 +88,7 @@ class FixedWindowRateLimiter {
     if (!current_state || now_ms - current_state.window_start_ms >= window_ms) {
       this.state_map.set(key, {
         window_start_ms: now_ms,
+        window_ms,
         count: 1
       });
 

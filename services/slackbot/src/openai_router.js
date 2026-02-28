@@ -124,36 +124,42 @@ async function run_openai_tool_routing({
   }
 
   const bounded_tool_calls = tool_calls.slice(0, Math.max(max_tool_calls, 1));
-  const tool_result_messages = [];
-  const executed_tool_calls = [];
 
-  for (const tool_call of bounded_tool_calls) {
-    const tool_name = tool_call?.function?.name;
-    const arguments_payload = parse_tool_arguments(tool_call?.function?.arguments);
+  const tool_call_results = await Promise.all(
+    bounded_tool_calls.map(async (tool_call) => {
+      const tool_name = tool_call?.function?.name;
+      const arguments_payload = parse_tool_arguments(tool_call?.function?.arguments);
+      const argument_summary = summarize_arguments_payload(arguments_payload);
 
-    logger.info("executing_tool_call", {
-      tool_name,
-      ...summarize_arguments_payload(arguments_payload)
-    });
+      logger.info("executing_tool_call", {
+        tool_name,
+        ...argument_summary
+      });
 
-    const tool_result = await tool_executor({
-      tool_name,
-      arguments_payload
-    });
+      const tool_result = await tool_executor({
+        tool_name,
+        arguments_payload
+      });
 
-    const argument_summary = summarize_arguments_payload(arguments_payload);
+      return {
+        tool_call_id: tool_call.id,
+        tool_name,
+        argument_summary,
+        tool_result
+      };
+    })
+  );
 
-    executed_tool_calls.push({
-      tool_name,
-      ...argument_summary
-    });
+  const tool_result_messages = tool_call_results.map((item) => ({
+    role: "tool",
+    tool_call_id: item.tool_call_id,
+    content: JSON.stringify(item.tool_result)
+  }));
 
-    tool_result_messages.push({
-      role: "tool",
-      tool_call_id: tool_call.id,
-      content: JSON.stringify(tool_result)
-    });
-  }
+  const executed_tool_calls = tool_call_results.map((item) => ({
+    tool_name: item.tool_name,
+    ...item.argument_summary
+  }));
 
   const followup_response = await openai_client.chat.completions.create({
     model: model_name,

@@ -16,6 +16,18 @@ import {
 
 const logger = new Logger(service_config.app.log_level);
 const role_cache_map = new Map();
+const ROLE_CACHE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const _role_cache_sweep_handle = setInterval(() => {
+  const now_ms = Date.now();
+  for (const [key, entry] of role_cache_map) {
+    if (now_ms >= entry.expires_at_ms) {
+      role_cache_map.delete(key);
+    }
+  }
+}, ROLE_CACHE_SWEEP_INTERVAL_MS);
+if (_role_cache_sweep_handle.unref) {
+  _role_cache_sweep_handle.unref();
+}
 const user_rate_limiter = new FixedWindowRateLimiter();
 const channel_rate_limiter = new FixedWindowRateLimiter();
 
@@ -252,10 +264,12 @@ async function handle_prompt({
         throw new Error(`Role ${role_name} is not allowed to execute ${tool_name}`);
       }
 
+      const is_confirmed = is_confirmation_satisfied(normalized_prompt);
+
       if (
         tool_definition.risk_level === "high" &&
         service_config.policy.require_confirmation_for_high_risk &&
-        !is_confirmation_satisfied(normalized_prompt)
+        !is_confirmed
       ) {
         throw new Error(
           `Tool ${tool_name} requires explicit confirmation. Add the word CONFIRM in your request.`
@@ -267,7 +281,7 @@ async function handle_prompt({
         channel_id: identity_context.channel_id,
         user_id: identity_context.user_id,
         role: role_name,
-        confirmed: is_confirmation_satisfied(normalized_prompt)
+        confirmed: is_confirmed
       };
 
       return await call_mcp_tool({
