@@ -11,3 +11,12 @@ metadata:
   name: artbattle-execution
   labels:
     plane: execution
+---
+# Redis and other shared infrastructure live here.
+# Network policies reference this namespace by label for egress rules.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shared
+  labels:
+    plane: shared

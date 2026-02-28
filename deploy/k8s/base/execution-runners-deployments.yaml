@@ -48,7 +48,7 @@ spec:
       serviceAccountName: runner-data-read-sa
       containers:
         - name: runner
-          image: ghcr.io/your-org/ab-runner-data-read:latest
+          image: REPLACE_ME:latest # TODO: set real image before deploy
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
@@ -81,7 +81,7 @@ spec:
       serviceAccountName: runner-profile-integrity-sa
       containers:
         - name: runner
-          image: ghcr.io/your-org/ab-runner-profile-integrity:latest
+          image: REPLACE_ME:latest # TODO: set real image before deploy
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
@@ -114,7 +114,7 @@ spec:
       serviceAccountName: runner-payments-sa
       containers:
         - name: runner
-          image: ghcr.io/your-org/ab-runner-payments:latest
+          image: REPLACE_ME:latest # TODO: set real image before deploy
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
@@ -147,7 +147,7 @@ spec:
       serviceAccountName: runner-growth-marketing-sa
       containers:
         - name: runner
-          image: ghcr.io/your-org/ab-runner-growth-marketing:latest
+          image: REPLACE_ME:latest # TODO: set real image before deploy
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
@@ -180,7 +180,7 @@ spec:
       serviceAccountName: runner-platform-db-edge-sa
       containers:
         - name: runner
-          image: ghcr.io/your-org/ab-runner-platform-db-edge:latest
+          image: REPLACE_ME:latest # TODO: set real image before deploy
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:

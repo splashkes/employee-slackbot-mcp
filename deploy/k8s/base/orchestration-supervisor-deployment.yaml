@@ -17,7 +17,7 @@ spec:
       serviceAccountName: orchestration-supervisor-sa
       containers:
         - name: orchestration-supervisor
-          image: ghcr.io/your-org/ab-orchestration-supervisor:latest
+          image: REPLACE_ME:latest # TODO: set real image before deploy
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

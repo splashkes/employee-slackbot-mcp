@@ -8,6 +8,7 @@ resources:
   - orchestration-supervisor-deployment.yaml
   - execution-runners-deployments.yaml
   - networkpolicy.yaml
+  - ingress.yaml
 
 configMapGenerator:
   - name: execution-capability-catalog

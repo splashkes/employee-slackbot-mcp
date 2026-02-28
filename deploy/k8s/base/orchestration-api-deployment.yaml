@@ -17,7 +17,7 @@ spec:
       serviceAccountName: orchestration-api-sa
       containers:
         - name: orchestration-api
-          image: ghcr.io/your-org/ab-orchestration-api:latest
+          image: REPLACE_ME:latest # TODO: set real image before deploy
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

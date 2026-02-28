@@ -1,0 +1,32 @@
+# Ingress for external traffic (Slack webhooks, API clients).
+# Requires an ingress controller (e.g. nginx-ingress, ALB) in the cluster.
+#
+# Before applying:
+#   1. Replace REPLACE_ME_HOSTNAME with your real domain.
+#   2. Configure TLS (cert-manager or pre-provisioned secret).
+#   3. If using Socket Mode, Slack webhooks are not needed and this
+#      resource can be omitted.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: orchestration-api-ingress
+  namespace: artbattle-orchestration
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - REPLACE_ME_HOSTNAME
+      secretName: orchestration-api-tls
+  rules:
+    - host: REPLACE_ME_HOSTNAME
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: orchestration-api
+                port:
+                  number: 3000
