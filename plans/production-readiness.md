@@ -16,14 +16,14 @@ Both Dockerfiles copy only their own `package.json` and run `npm install` from t
 
 ### Tasks
 
-- [ ] **1a. Restructure Dockerfiles for workspace support.** Both services need a multi-stage build that:
+- [x] **1a. Restructure Dockerfiles for workspace support.** Both services need a multi-stage build that:
   1. Copies root `package.json` + `package-lock.json`.
   2. Copies `packages/shared/` (the only workspace dep).
   3. Copies the target service's `package.json`.
-  4. Runs `npm install --omit=dev --workspace=services/<name>` from the root.
+  4. Runs `npm ci --omit=dev --workspace=services/<name>` from the root.
   5. Copies the service `src/` directory.
   6. Sets `CMD` to `node src/index.js` (avoids needing the service-level `npm run start`).
-- [ ] **1b. Update `.dockerignore` files** to allow `packages/` and root `package.json` through when the build context is the repo root.
+- [x] **1b. Update `.dockerignore` files** — moved to repo root for repo-root build context. Old per-service files removed.
 - [ ] **1c. Verify builds locally.** `docker build -f services/slackbot/Dockerfile .` and `docker build -f services/mcp-gateway/Dockerfile .` should both succeed from the repo root.
 
 ---
@@ -34,7 +34,7 @@ Both Dockerfiles copy only their own `package.json` and run `npm install` from t
 
 ### Tasks
 
-- [ ] **2a.** Change the default to `gpt-4o-mini` (or whichever model is intended).
+- [x] **2a.** Changed default to `gpt-4o-mini`.
 
 ---
 
@@ -44,8 +44,8 @@ Neither service handles `SIGTERM`. Kubernetes sends SIGTERM before killing a pod
 
 ### Tasks
 
-- [ ] **3a. Slackbot (`services/slackbot/src/index.js`):** Listen for `SIGTERM`, call `app.stop()` (Bolt's built-in graceful shutdown), clear the rate-limiter and role-cache sweep intervals, then exit.
-- [ ] **3b. MCP gateway (`services/mcp-gateway/src/index.js`):** Listen for `SIGTERM`, call `server.close()`, wait for in-flight requests to drain (with a timeout), then exit.
+- [x] **3a. Slackbot (`services/slackbot/src/index.js`):** Listens for `SIGTERM`/`SIGINT`, calls `app.stop()`, clears role-cache sweep interval, then exits.
+- [x] **3b. MCP gateway (`services/mcp-gateway/src/index.js`):** Listens for `SIGTERM`/`SIGINT`, calls `server.close()`, waits for in-flight requests to drain (10s timeout), then exits.
 
 ---
 
@@ -71,11 +71,15 @@ The k8s manifests define 7 deployments (2 orchestration + 5 execution runners), 
 
 ### Tasks
 
-- [ ] **5a. Decide on phased deployment scope.** For the initial launch, only `orchestration-api` (slackbot) and `orchestration-supervisor` or the gateway need to run. The 5 runner deployments are future work.
-- [ ] **5b. Option A — Remove runner deployments for now.** Strip the 5 runner deployments, their ServiceAccounts, and their secrets from the manifests. Add them back when runner code exists. Update `kustomization.yaml`, `services.yaml`, and `networkpolicy.yaml` accordingly.
-- [ ] **5c. Option B — Keep runners as placeholders.** Set `replicas: 0` on all runner deployments so they exist in the manifest but don't schedule pods. This avoids `ImagePullBackOff` while preserving the target topology.
-- [ ] **5d. Map `orchestration-api` image** to the slackbot Docker image. Map `orchestration-supervisor` image to the mcp-gateway Docker image (or create a supervisor service if it's distinct). Update the `REPLACE_ME:latest` references.
-- [ ] **5e. Update the `secrets.template.yaml`** to add `MCP_GATEWAY_AUTH_TOKEN` to the orchestration secrets (slackbot needs it to call the gateway).
+- [x] **5a. Decide on phased deployment scope.** Only `orchestration-api` (slackbot) and `orchestration-supervisor` (mcp-gateway) run for v1. Runners are deferred.
+- [x] **5b. Keep runners as placeholders.** Set `replicas: 0` on all 5 runner deployments so they exist in the manifest but don't schedule pods. Avoids `ImagePullBackOff` while preserving target topology.
+- [x] **5c. Map `orchestration-api` image** to slackbot Docker image. Map `orchestration-supervisor` to mcp-gateway. Image refs already use `ghcr.io/splashkes/`.
+- [x] **5d. Fix orchestration-supervisor port** from 8080 to 8081 to match MCP gateway default. Updated deployment, service, and network policy.
+- [x] **5e. Update `secrets.template.yaml`** — added `MCP_GATEWAY_AUTH_TOKEN` to orchestration secrets. Removed `REDIS_URL` (not needed for v1).
+- [x] **5f. Add env vars to orchestration-api deployment** — `SLACK_USE_SOCKET_MODE=true`, `MCP_GATEWAY_URL` pointing to supervisor service, `ALLOWED_TOOLS_FILE` path. Removed unused capability-catalog volume mount.
+- [x] **5g. Remove orchestration-supervisor env vars** for `TASK_QUEUE_BACKEND` and `EVENT_TOPICS` (not used in v1 — gateway is HTTP-only).
+- [x] **5h. Remove ingress.yaml from kustomization.yaml** (not needed with Socket Mode). File kept for future Events API mode.
+- [x] **5i. Remove configMapGenerator** for execution-capability-catalog (config baked into Docker images).
 
 ---
 
@@ -85,9 +89,9 @@ Both `/healthz` and `/readyz` return `200 ok` unconditionally. Kubernetes livene
 
 ### Tasks
 
-- [ ] **6a. Slackbot `/readyz`:** Check that the OpenAI API key is set and that a test HEAD request to the MCP gateway `/healthz` succeeds.
-- [ ] **6b. MCP gateway `/readyz`:** Check that the tools manifest loaded successfully (it already does — this is a no-op if the manifest is in memory).
-- [ ] **6c. Add liveness/readiness probe definitions** to the k8s deployment manifests (`livenessProbe` and `readinessProbe` on each container spec).
+- [x] **6a. Slackbot `/readyz`:** Checks that OpenAI API key is set and HEAD request to MCP gateway `/healthz` succeeds (3s timeout).
+- [x] **6b. MCP gateway `/readyz`:** Already functional — returns 200 when tools manifest is loaded.
+- [x] **6c. Liveness/readiness probes** already defined in k8s deployment manifests.
 
 ---
 
@@ -97,14 +101,7 @@ There's no documentation on how to create the Slack app, configure scopes, insta
 
 ### Tasks
 
-- [ ] **7a. Create `docs/slack-app-setup.md`** covering:
-  1. Create a Slack app at api.slack.com/apps.
-  2. Required Bot Token Scopes: `app_mentions:read`, `chat:write`, `commands`.
-  3. Enable Socket Mode (generate `SLACK_APP_TOKEN` with `connections:write` scope).
-  4. Install to workspace and copy `SLACK_BOT_TOKEN`.
-  5. Create the `/ab` slash command pointing to the ingress URL (or socket mode).
-  6. Subscribe to `app_mention` event.
-  7. Copy `SLACK_SIGNING_SECRET` from app settings.
+- [x] **7a. Created `docs/slack-app-setup.md`** covering app creation, scopes, Socket Mode, installation, slash command, event subscriptions, and signing secret.
 - [ ] **7b. Optionally create a `slack-manifest.yaml`** for one-click Slack app creation via manifest import.
 
 ---
@@ -115,9 +112,8 @@ The k8s manifests and secrets reference `redis://redis.shared.svc.cluster.local:
 
 ### Tasks
 
-- [ ] **8a. Decide: is Redis needed for v1?** If the slackbot and gateway communicate directly via HTTP (current design), Redis is not needed at launch.
-- [ ] **8b. If Redis is not needed for v1:** Remove `REDIS_URL` from `secrets.template.yaml` and note in docs that Redis is deferred to the async agent phase.
-- [ ] **8c. If Redis is needed:** Add a Redis `Deployment` + `Service` manifest in `deploy/k8s/base/` under the `shared` namespace. Use `redis:7-alpine` image with appropriate resource limits.
+- [x] **8a. Redis is NOT needed for v1.** Slackbot and gateway communicate directly via HTTP.
+- [x] **8b. Removed `REDIS_URL` from orchestration-secrets.** Kept in runner secrets for future use. Redis is deferred to the async agent phase.
 
 ---
 
@@ -156,34 +152,34 @@ Using GitHub Container Registry (ghcr.io) since the repo is on GitHub. Image ref
 
 ### Tasks
 
-- [ ] **10a. If using Socket Mode (recommended for v1):** Set `SLACK_USE_SOCKET_MODE=true` in the orchestration secrets. Remove or skip applying `ingress.yaml`. No domain or TLS needed.
-- [ ] **10b. If using Events API:** Provision a domain, point DNS to the DigitalOcean load balancer, install cert-manager or use a DO-managed certificate, and update `REPLACE_ME_HOSTNAME` in `ingress.yaml`.
+- [x] **10a. Using Socket Mode for v1.** `SLACK_USE_SOCKET_MODE=true` set in orchestration-api deployment env. Ingress removed from kustomization.yaml. No domain or TLS needed.
+- [ ] **10b. If using Events API (future):** Provision a domain, point DNS to the DigitalOcean load balancer, install cert-manager or use a DO-managed certificate, and update `REPLACE_ME_HOSTNAME` in `ingress.yaml`.
 
 ---
 
 ## Execution Order
 
 ```
-Phase 1 — Build fixes (can deploy after this)
-  1. Fix Docker builds                          [Blocker]
-  2. Fix OpenAI model default                   [Blocker]
-  5. Reconcile k8s manifests with actual code   [High]
-  9. Container registry and image push          [Blocker]
+Phase 1 — Build fixes (can deploy after this)            ✅ DONE
+  1. Fix Docker builds                          [Blocker]  ✅
+  2. Fix OpenAI model default                   [Blocker]  ✅
+  5. Reconcile k8s manifests with actual code   [High]     ✅
+  9. Container registry and image push          [Blocker]  ⚠️  9c/9d/9e remain (manual ops)
 
-Phase 2 — Operational basics
-  3. SIGTERM / graceful shutdown                [High]
-  6. Health endpoint dependency checks          [Medium]
- 10. Ingress / TLS / domain (or Socket Mode)   [Blocker for Events API]
+Phase 2 — Operational basics                              ✅ DONE
+  3. SIGTERM / graceful shutdown                [High]     ✅
+  6. Health endpoint dependency checks          [Medium]   ✅
+ 10. Ingress / TLS / domain (or Socket Mode)   [Blocker]  ✅ (Socket Mode chosen)
 
-Phase 3 — Connect Slack
-  7. Slack app setup documentation             [Medium]
-     Fill in real secrets in secrets.template.yaml
-     Deploy to cluster
-     Verify /ab command and @mention work
+Phase 3 — Connect Slack                                   ⚠️ MANUAL
+  7. Slack app setup documentation             [Medium]   ✅
+     Fill in real secrets in secrets.template.yaml         ⬜ (manual)
+     Deploy to cluster                                     ⬜ (manual)
+     Verify /ab command and @mention work                  ⬜ (manual)
 
-Phase 4 — Real tool backends
-  4. Implement real tool backends              [High]
-  8. Provision Redis (if needed)               [Medium]
+Phase 4 — Real tool backends                              ⬜ NOT STARTED
+  4. Implement real tool backends              [High]     ⬜
+  8. Provision Redis (if needed)               [Medium]   ✅ (deferred — not needed for v1)
 ```
 
 ---

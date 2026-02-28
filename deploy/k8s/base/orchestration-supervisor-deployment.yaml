@@ -22,7 +22,7 @@ spec:
           image: ghcr.io/splashkes/orchestration-supervisor:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 8080
+            - containerPort: 8081
               name: http
           envFrom:
             - secretRef:
@@ -31,21 +31,17 @@ spec:
             - name: NODE_ENV
               value: production
             - name: PORT
-              value: "8080"
-            - name: TASK_QUEUE_BACKEND
-              value: redis-streams
-            - name: EVENT_TOPICS
-              value: workflow.created,task.dispatched,task.started,task.heartbeat,artifact.created,task.completed,task.failed,workflow.completed
+              value: "8081"
           readinessProbe:
             httpGet:
               path: /readyz
-              port: 8080
+              port: 8081
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /healthz
-              port: 8080
+              port: 8081
             initialDelaySeconds: 15
             periodSeconds: 20
 ---

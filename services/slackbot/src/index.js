@@ -355,7 +355,30 @@ async function start_service() {
       {
         path: "/readyz",
         method: ["GET"],
-        handler: (_req, res) => {
+        handler: async (_req, res) => {
+          if (!service_config.openai.api_key) {
+            res.writeHead(503);
+            res.end("not ready: missing OPENAI_API_KEY");
+            return;
+          }
+
+          try {
+            const gateway_health_url = `${service_config.mcp.gateway_url.replace(/\/$/, "")}/healthz`;
+            const probe = await fetch(gateway_health_url, {
+              method: "HEAD",
+              signal: AbortSignal.timeout(3000)
+            });
+            if (!probe.ok) {
+              res.writeHead(503);
+              res.end("not ready: mcp gateway unhealthy");
+              return;
+            }
+          } catch (_err) {
+            res.writeHead(503);
+            res.end("not ready: mcp gateway unreachable");
+            return;
+          }
+
           res.writeHead(200);
           res.end("ready");
         }
@@ -413,6 +436,25 @@ async function start_service() {
     socket_mode: service_config.slack.use_socket_mode,
     allowed_tools_count: allowed_tools_manifest.tools.length
   });
+
+  const shutdown = async () => {
+    logger.info("shutdown_initiated", { signal: "SIGTERM" });
+
+    clearInterval(_role_cache_sweep_handle);
+    role_cache_map.clear();
+
+    try {
+      await app.stop();
+      logger.info("shutdown_complete");
+    } catch (error) {
+      logger.error("shutdown_error", { error_message: error?.message });
+    }
+
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 start_service().catch((error) => {

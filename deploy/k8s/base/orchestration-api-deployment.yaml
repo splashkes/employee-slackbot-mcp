@@ -32,13 +32,12 @@ spec:
               value: production
             - name: PORT
               value: "3000"
-            - name: CAPABILITY_CATALOG_FILE
-              value: /app/config/execution-capability-catalog.json
-          volumeMounts:
-            - name: capability-catalog-volume
-              mountPath: /app/config/execution-capability-catalog.json
-              subPath: execution-capability-catalog.json
-              readOnly: true
+            - name: SLACK_USE_SOCKET_MODE
+              value: "true"
+            - name: MCP_GATEWAY_URL
+              value: http://orchestration-supervisor.artbattle-orchestration.svc.cluster.local:8081
+            - name: ALLOWED_TOOLS_FILE
+              value: /app/config/allowed-tools.json
           readinessProbe:
             httpGet:
               path: /readyz
@@ -51,10 +50,6 @@ spec:
               port: 3000
             initialDelaySeconds: 15
             periodSeconds: 20
-      volumes:
-        - name: capability-catalog-volume
-          configMap:
-            name: execution-capability-catalog
 ---
 apiVersion: v1
 kind: ServiceAccount

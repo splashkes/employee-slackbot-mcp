@@ -358,6 +358,25 @@ async function start_service() {
       allowed_tools_count: allowed_tools_manifest.tools.length
     });
   });
+
+  const SHUTDOWN_TIMEOUT_MS = 10_000;
+
+  const shutdown = () => {
+    logger.info("shutdown_initiated", { signal: "SIGTERM" });
+
+    server.close(() => {
+      logger.info("shutdown_complete");
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      logger.warn("shutdown_timeout", { timeout_ms: SHUTDOWN_TIMEOUT_MS });
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS).unref();
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 start_service().catch((error) => {

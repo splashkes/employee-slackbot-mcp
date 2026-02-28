@@ -63,10 +63,33 @@ spec:
               kubernetes.io/metadata.name: artbattle-orchestration
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8081
 ---
 # ---------------------------------------------------------------------------
-# Orchestration egress: allow Redis in shared namespace, plus HTTPS + DNS
+# Orchestration internal: allow api -> supervisor on port 8081
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: orchestration-internal-egress
+  namespace: artbattle-orchestration
+spec:
+  podSelector:
+    matchLabels:
+      app: orchestration-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: orchestration-supervisor
+      ports:
+        - protocol: TCP
+          port: 8081
+---
+# ---------------------------------------------------------------------------
+# Orchestration egress: allow HTTPS, DNS, and managed Redis (port 25061)
 # ---------------------------------------------------------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -81,25 +104,20 @@ spec:
     - Egress
   egress:
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: shared
-      ports:
-        - protocol: TCP
-          port: 6379
-    - to:
         - ipBlock:
             cidr: 0.0.0.0/0
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 25061
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
 ---
 # ---------------------------------------------------------------------------
-# Execution egress: allow Redis in shared namespace, plus HTTPS + DNS + Postgres
+# Execution egress: allow HTTPS, DNS, Postgres, and managed Redis (port 25061)
 # ---------------------------------------------------------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -114,18 +132,13 @@ spec:
     - Egress
   egress:
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: shared
-      ports:
-        - protocol: TCP
-          port: 6379
-    - to:
         - ipBlock:
             cidr: 0.0.0.0/0
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 25061
         - protocol: UDP
           port: 53
         - protocol: TCP

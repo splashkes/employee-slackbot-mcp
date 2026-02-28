@@ -34,7 +34,7 @@ metadata:
   name: runner-data-read
   namespace: artbattle-execution
 spec:
-  replicas: 3
+  replicas: 0  # No runner code exists yet — scale up when implemented
   selector:
     matchLabels:
       app: runner-data-read
@@ -54,6 +54,8 @@ spec:
           imagePullPolicy: Always
           envFrom:
             - secretRef:
+                name: shared-infra-secrets
+            - secretRef:
                 name: runner-data-read-secrets
           env:
             - name: RUNNER_DOMAIN
@@ -69,7 +71,7 @@ metadata:
   name: runner-profile-integrity
   namespace: artbattle-execution
 spec:
-  replicas: 2
+  replicas: 0  # No runner code exists yet — scale up when implemented
   selector:
     matchLabels:
       app: runner-profile-integrity
@@ -89,6 +91,8 @@ spec:
           imagePullPolicy: Always
           envFrom:
             - secretRef:
+                name: shared-infra-secrets
+            - secretRef:
                 name: runner-profile-integrity-secrets
           env:
             - name: RUNNER_DOMAIN
@@ -104,7 +108,7 @@ metadata:
   name: runner-payments
   namespace: artbattle-execution
 spec:
-  replicas: 2
+  replicas: 0  # No runner code exists yet — scale up when implemented
   selector:
     matchLabels:
       app: runner-payments
@@ -124,6 +128,8 @@ spec:
           imagePullPolicy: Always
           envFrom:
             - secretRef:
+                name: shared-infra-secrets
+            - secretRef:
                 name: runner-payments-secrets
           env:
             - name: RUNNER_DOMAIN
@@ -139,7 +145,7 @@ metadata:
   name: runner-growth-marketing
   namespace: artbattle-execution
 spec:
-  replicas: 2
+  replicas: 0  # No runner code exists yet — scale up when implemented
   selector:
     matchLabels:
       app: runner-growth-marketing
@@ -159,6 +165,8 @@ spec:
           imagePullPolicy: Always
           envFrom:
             - secretRef:
+                name: shared-infra-secrets
+            - secretRef:
                 name: runner-growth-marketing-secrets
           env:
             - name: RUNNER_DOMAIN
@@ -174,7 +182,7 @@ metadata:
   name: runner-platform-db-edge
   namespace: artbattle-execution
 spec:
-  replicas: 2
+  replicas: 0  # No runner code exists yet — scale up when implemented
   selector:
     matchLabels:
       app: runner-platform-db-edge
@@ -193,6 +201,8 @@ spec:
           image: ghcr.io/splashkes/runner-platform-db-edge:latest
           imagePullPolicy: Always
           envFrom:
+            - secretRef:
+                name: shared-infra-secrets
             - secretRef:
                 name: runner-platform-db-edge-secrets
           env:

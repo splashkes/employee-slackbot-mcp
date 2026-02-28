@@ -1,5 +1,11 @@
 node_modules
 npm-debug.log*
 .git
+.claude
 .env
 .env.*
+tests
+docs
+deploy
+plans
+*.md

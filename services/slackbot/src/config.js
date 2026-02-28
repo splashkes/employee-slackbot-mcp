@@ -41,7 +41,7 @@ const service_config = {
   },
   openai: {
     api_key: process.env.OPENAI_API_KEY || "",
-    model: process.env.OPENAI_MODEL || "gpt-5-mini",
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
     max_output_tokens: parse_number(process.env.OPENAI_MAX_OUTPUT_TOKENS, 1200),
     timeout_ms: parse_number(process.env.OPENAI_TIMEOUT_MS, 30000)
   },

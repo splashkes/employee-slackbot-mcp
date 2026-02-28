@@ -8,12 +8,5 @@ resources:
   - orchestration-supervisor-deployment.yaml
   - execution-runners-deployments.yaml
   - networkpolicy.yaml
-  - ingress.yaml
+  # ingress.yaml — not needed when using Socket Mode; re-add for Events API mode
 
-configMapGenerator:
-  - name: execution-capability-catalog
-    files:
-      - execution-capability-catalog.json=execution-capability-catalog.json
-
-generatorOptions:
-  disableNameSuffixHash: true
