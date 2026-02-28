@@ -449,10 +449,22 @@ async function get_eventbrite_data({ eid }, sql) {
     ORDER BY fetched_at DESC LIMIT 1
   `;
 
+  const cached = cache[0] || null;
+  let freshness = {};
+  if (cached?.fetched_at) {
+    const age_minutes = Math.round((Date.now() - new Date(cached.fetched_at).getTime()) / 60000);
+    const stale = age_minutes > 360;
+    freshness = { fetched_at: cached.fetched_at, age_minutes, source: "cache", stale };
+    if (stale) {
+      freshness._stale_warning = `Cache is ${age_minutes} minutes old (${Math.round(age_minutes / 60)}h). Use refresh_eventbrite_data to get fresh data.`;
+    }
+  }
+
   return {
     eventbrite_id: event[0].eventbrite_id,
-    cached_data: cache[0] || null,
-    has_cache: cache.length > 0
+    cached_data: cached,
+    has_cache: cache.length > 0,
+    ...freshness
   };
 }
 

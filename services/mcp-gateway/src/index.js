@@ -15,6 +15,8 @@ import { MCP_ERROR_CODES } from "@abcodex/shared/constants.js";
 import { create_db_client, close_db_client } from "./db.js";
 import { create_edge_client } from "./edge_client.js";
 import { create_audit_writer } from "./audit_writer.js";
+import { create_chart_scheduler } from "./chart_scheduler.js";
+import { create_slack_poster } from "./slack_poster.js";
 
 const logger = new Logger(service_config.app.log_level);
 
@@ -240,7 +242,7 @@ async function start_service() {
     ) {
       const tool_name = decodeURIComponent(path_segments[2]);
       const request_start_ms = Date.now();
-      const safe_preview_keys = ["eid", "round", "group_by", "search_by", "status", "hours_back", "audience_filter", "table_name", "limit"];
+      const safe_preview_keys = ["eid", "round", "group_by", "search_by", "status", "hours_back", "audience_filter", "table_name", "limit", "title", "description", "priority", "related_eid", "force", "cadence", "action", "include_comparators", "slack_channel_id", "force_rescore"];
 
       let parsed_request = null;
       let tool_definition = null;
@@ -390,7 +392,7 @@ async function start_service() {
           domain: tool_definition.domain || null,
           duration_ms,
           requester_user_id: origin.slack_user_id,
-          arguments_hash: args_hash,
+          arguments_preview,
           result_keys, has_error: has_error_field
         });
 
@@ -532,19 +534,33 @@ async function start_service() {
     });
   });
 
+  // Initialize chart scheduler
+  const slack_poster = create_slack_poster(service_config.slack.bot_token);
+  const chart_scheduler = create_chart_scheduler({
+    sql,
+    config: service_config,
+    slack_poster
+  });
+
   server.listen(service_config.app.port, () => {
     logger.info("mcp_gateway_started", {
       port: service_config.app.port,
       allowed_tools_count: allowed_tools_manifest.tools.length,
       has_db: !!sql,
-      has_edge: !!edge
+      has_edge: !!edge,
+      has_chart_scheduler: !!slack_poster
     });
+
+    // Start chart scheduler after server is listening
+    chart_scheduler.start();
   });
 
   const SHUTDOWN_TIMEOUT_MS = 10_000;
 
   const shutdown = async () => {
     logger.info("shutdown_initiated", { signal: "SIGTERM" });
+
+    chart_scheduler.stop();
 
     server.close(() => {
       logger.info("http_server_closed");

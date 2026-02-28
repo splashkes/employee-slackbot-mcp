@@ -1552,6 +1552,307 @@
         },
         "additionalProperties": false
       }
+    },
+    {
+      "tool_name": "refresh_eventbrite_data",
+      "description": "Fetch fresh ticket sales data from the Eventbrite API for an event and update the cache. Use when someone asks to refresh or update Eventbrite data, or when cached data is stale. Skips refresh if cache is < 1 hour old (use force=true to override).",
+      "risk_level": "medium",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier (e.g. AB4023)"
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Force refresh even if cache is fresh (default: false)"
+          }
+        },
+        "required": ["eid"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "verify_eventbrite_config",
+      "description": "Validate Eventbrite API connectivity — checks token validity, organization access, event mapping, and event reachability. Use when someone reports Eventbrite issues or before setting up chart autoposts.",
+      "risk_level": "low",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier to verify mapping for"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_chart_comparators",
+      "description": "Score and select comparator events for ticket sales pace charts. Finds similar past events by city, scale, pricing, recency, and day-of-week. Results are cached for 24h. Use when someone asks which events are being compared or wants to see comparator options.",
+      "risk_level": "low",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Target event identifier"
+          },
+          "force_rescore": {
+            "type": "boolean",
+            "description": "Force re-scoring even if cached (default: false)"
+          }
+        },
+        "required": ["eid"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "set_chart_comparators",
+      "description": "Lock specific comparator events for a chart schedule instead of auto-selecting. Use when someone says 'compare against AB4001 and AB3998' or wants to customize which events appear on the chart.",
+      "risk_level": "medium",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Target event identifier"
+          },
+          "comparator_eids": {
+            "type": "object",
+            "description": "Array of event eids to use as comparators (e.g. ['AB4001', 'AB3998'])"
+          }
+        },
+        "required": ["eid", "comparator_eids"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "generate_chart",
+      "description": "Generate a ticket sales pace chart for an event, optionally with comparator events. Refreshes stale data automatically, builds cumulative timeline, renders via QuickChart.io, and returns a chart image URL. Use when someone asks for a ticket chart, sales pace, or ticket visualization.",
+      "risk_level": "medium",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "include_comparators": {
+            "type": "boolean",
+            "description": "Include comparator events on chart (default: true)"
+          },
+          "comparator_eids": {
+            "type": "object",
+            "description": "Specific comparator eids (optional — auto-selects if omitted)"
+          }
+        },
+        "required": ["eid"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "schedule_chart_autopost",
+      "description": "Schedule recurring ticket sales pace charts to auto-post to a Slack channel. Cadence adjusts based on proximity to event date (weekly > 28d, every 2 days 8-28d, daily < 8d). Auto-stops 2 days after the event. Use when someone wants ongoing chart updates.",
+      "risk_level": "medium",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing"
+      ],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "slack_channel_id": {
+            "type": "string",
+            "description": "Slack channel ID to post charts to"
+          },
+          "cadence": {
+            "type": "string",
+            "enum": ["auto", "weekly", "every_2_days", "daily"],
+            "description": "Posting cadence (default: auto — adjusts based on days until event)"
+          },
+          "comparator_eids": {
+            "type": "object",
+            "description": "Lock specific comparator eids (optional — auto-selects if omitted)"
+          }
+        },
+        "required": ["eid", "slack_channel_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_chart_schedule",
+      "description": "List chart autopost schedules. Shows active, paused, and completed jobs with next run times. Use when someone asks about scheduled charts or autopost status.",
+      "risk_level": "low",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Filter by event identifier (optional)"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "paused", "completed", "error"],
+            "description": "Filter by job status (optional)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "update_chart_schedule",
+      "description": "Pause, resume, run now, or cancel a chart autopost schedule. Use when someone asks to stop, pause, resume, or immediately trigger a chart post.",
+      "risk_level": "medium",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["pause", "resume", "run_now", "cancel"],
+            "description": "Action to perform on the schedule"
+          }
+        },
+        "required": ["eid", "action"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_chart_history",
+      "description": "View recent chart posts and skipped runs for an event. Shows chart URLs, ticket counts, pace, and skip reasons. Use when someone asks about past charts or chart history.",
+      "risk_level": "low",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max entries to return (default 20, max 50)",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": ["eid"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_chart_scheduler_status",
+      "description": "Overview of the chart scheduler — active jobs, recent posts, error counts, and skip rates. Use when someone asks about the chart system health or scheduler status.",
+      "risk_level": "low",
+      "domain": "eventbrite-charts",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "hours_back": {
+            "type": "integer",
+            "description": "Hours to look back for recent activity (default 24)",
+            "minimum": 1,
+            "maximum": 720
+          }
+        },
+        "additionalProperties": false
+      }
     }
   ]
 }

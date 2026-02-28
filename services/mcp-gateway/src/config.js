@@ -47,6 +47,14 @@ const service_config = {
     url: process.env.CODEBASE_REPO_URL || "",
     clone_dir: process.env.REPO_CLONE_DIR || "/tmp/ab-repo-clone",
     branch: process.env.REPO_BRANCH || "main"
+  },
+  eventbrite: {
+    api_token: process.env.EVENTBRITE_API_TOKEN || "",
+    org_id: process.env.EVENTBRITE_ORG_ID || "",
+    rate_limit_ms: parse_number(process.env.EVENTBRITE_RATE_LIMIT_MS, 200)
+  },
+  slack: {
+    bot_token: process.env.SLACK_BOT_TOKEN || ""
   }
 };
 

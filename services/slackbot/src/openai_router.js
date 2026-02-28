@@ -61,13 +61,21 @@ function extract_text_from_message(message_content) {
   return "";
 }
 
+const SAFE_LOG_KEYS = ["eid", "round", "group_by", "search_by", "status", "hours_back", "audience_filter", "table_name", "limit", "title", "description", "priority", "related_eid", "city", "force", "cadence", "action", "include_comparators", "slack_channel_id", "force_rescore"];
+
 function summarize_arguments_payload(arguments_payload) {
   const normalized_payload =
     arguments_payload && typeof arguments_payload === "object" ? arguments_payload : {};
 
+  const preview = {};
+  for (const k of SAFE_LOG_KEYS) {
+    if (k in normalized_payload) preview[k] = normalized_payload[k];
+  }
+
   return {
     arguments_hash: hash_json_payload(normalized_payload),
-    argument_keys: Object.keys(normalized_payload).sort()
+    argument_keys: Object.keys(normalized_payload).sort(),
+    arguments_preview: Object.keys(preview).length > 0 ? preview : undefined
   };
 }
 
@@ -119,7 +127,14 @@ async function run_openai_tool_routing({
     "• TIMEZONE: Event datetimes in the database are stored in UTC. When the data includes a timezone_icann field (e.g. America/Toronto, America/New_York, Australia/Sydney), you MUST convert UTC times to that local timezone before displaying. Example: 2026-12-18T00:30:00Z with timezone America/Toronto = Dec 17, 2026 at 7:30 PM ET. Always show the timezone abbreviation (ET, PT, AEST, etc.).",
     "• Format dates/times in a human-readable way (Jan 15, 2025 at 3:14 PM ET, not 2025-01-15T15:14:15Z)",
     "• Keep responses concise — Slack messages should be scannable, not walls of text. For large result sets (20+ items), present a summary with totals and the top entries rather than listing every single row.",
-    "• STRUCTURE: Always start your response with a single-line summary (e.g. '*AB4003* — Toronto, Jan 15, 2025 · 3 rounds · 12 artworks'). Put detailed data on subsequent lines. This first line may be shown as a preview in the channel with full details in a thread."
+    "• STRUCTURE: Always start your response with a single-line summary (e.g. '*AB4003* — Toronto, Jan 15, 2025 · 3 rounds · 12 artworks'). Put detailed data on subsequent lines. This first line may be shown as a preview in the channel with full details in a thread.",
+    "",
+    "EVENTBRITE CHARTS:",
+    "• When asked about ticket sales, ticket pace, or chart requests: first check cache freshness with get_eventbrite_data. If stale (>6h), call refresh_eventbrite_data before generating the chart.",
+    "• Use generate_chart to create ticket sales pace charts. It auto-refreshes stale data and picks comparators.",
+    "• For ongoing tracking, suggest schedule_chart_autopost so charts auto-post to the channel on a schedule.",
+    "• Use verify_eventbrite_config to diagnose Eventbrite connectivity issues.",
+    "• Chart URLs from QuickChart.io are temporary (~30 days). The chart image will unfurl directly in Slack."
   ].join("\n");
 
   const messages = [
