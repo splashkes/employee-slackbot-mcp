@@ -33,6 +33,20 @@ const service_config = {
     ),
     allowed_tools_file: process.env.ALLOWED_TOOLS_FILE || default_allowed_tools_file,
     enable_mutating_tools: parse_boolean(process.env.ENABLE_MUTATING_TOOLS, false)
+  },
+  db: {
+    url: process.env.SUPABASE_DB_URL || process.env.SUPABASE_DB_URL_READONLY || "",
+    max_connections: parse_number(process.env.DB_MAX_CONNECTIONS, 5),
+    idle_timeout_sec: parse_number(process.env.DB_IDLE_TIMEOUT_SEC, 30)
+  },
+  edge: {
+    supabase_url: process.env.SUPABASE_URL || "",
+    service_role_key: process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  },
+  repo: {
+    url: process.env.CODEBASE_REPO_URL || "",
+    clone_dir: process.env.REPO_CLONE_DIR || "/tmp/ab-repo-clone",
+    branch: process.env.REPO_BRANCH || "main"
   }
 };
 

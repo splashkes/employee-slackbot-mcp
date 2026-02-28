@@ -47,10 +47,10 @@ spec:
     spec:
       serviceAccountName: runner-data-read-sa
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: esbmcp
       containers:
         - name: runner
-          image: ghcr.io/splashkes/runner-data-read:latest
+          image: registry.digitalocean.com/esbmcp/runner-data-read:latest
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -84,10 +84,10 @@ spec:
     spec:
       serviceAccountName: runner-profile-integrity-sa
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: esbmcp
       containers:
         - name: runner
-          image: ghcr.io/splashkes/runner-profile-integrity:latest
+          image: registry.digitalocean.com/esbmcp/runner-profile-integrity:latest
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -121,10 +121,10 @@ spec:
     spec:
       serviceAccountName: runner-payments-sa
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: esbmcp
       containers:
         - name: runner
-          image: ghcr.io/splashkes/runner-payments:latest
+          image: registry.digitalocean.com/esbmcp/runner-payments:latest
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -158,10 +158,10 @@ spec:
     spec:
       serviceAccountName: runner-growth-marketing-sa
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: esbmcp
       containers:
         - name: runner
-          image: ghcr.io/splashkes/runner-growth-marketing:latest
+          image: registry.digitalocean.com/esbmcp/runner-growth-marketing:latest
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -195,10 +195,10 @@ spec:
     spec:
       serviceAccountName: runner-platform-db-edge-sa
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: esbmcp
       containers:
         - name: runner
-          image: ghcr.io/splashkes/runner-platform-db-edge:latest
+          image: registry.digitalocean.com/esbmcp/runner-platform-db-edge:latest
           imagePullPolicy: Always
           envFrom:
             - secretRef:

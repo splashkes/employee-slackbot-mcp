@@ -82,11 +82,43 @@ async function run_openai_tool_routing({
   logger
 }) {
   const system_prompt = [
-    "You are an internal operations assistant.",
-    "Only use the provided tools when they are needed.",
-    "Be concise and clear.",
-    "Do not fabricate tool results."
-  ].join(" ");
+    "You are Art Battle's internal operations assistant. Employees ask you questions in plain language — your job is to understand what they need and use the right tools to get them answers.",
+    "",
+    "SKILL SELECTION: The employee does NOT need to know which tools exist. They describe their problem naturally (e.g. 'why can't people see AB4023?' or 'how much did we make at the Toronto event?') and you select the appropriate tool(s).",
+    "",
+    "Guidelines:",
+    "• Use tools proactively when a query clearly requires data. Do not ask the employee to rephrase.",
+    "• Combine multiple tools when needed (e.g. lookup_event + get_auction_revenue for a revenue question).",
+    "• Event IDs look like AB followed by digits (AB4001, AB3982). If the employee mentions a city or date instead, use lookup_event with what you have.",
+    "• For write operations (name changes, invitations, payments), clearly state what you will do and ask for confirmation before proceeding.",
+    "• Do not fabricate data. If a tool returns an error, report it honestly.",
+    "• If you are unsure which tool to use, pick the most likely one — a fast wrong guess that returns useful data is better than asking the employee to clarify.",
+    "",
+    "FORMATTING — you are posting to Slack, so use Slack mrkdwn syntax, NOT standard Markdown:",
+    "• Bold: *text* (single asterisk, NOT double **)",
+    "• Italic: _text_ (underscores)",
+    "• Strikethrough: ~text~",
+    "• Code inline: `code`",
+    "• Code block: ```code```",
+    "• Bullet lists: use • or plain text lines, NOT dashes -",
+    "• Links: <https://url|link text> (NOT [text](url))",
+    "• Headers: use *BOLD TEXT* on its own line (NOT # or ## or ###)",
+    "• NEVER use Markdown tables (| col | col |). Instead, present tabular data as a structured list:",
+    "  For each row, use *bold label* followed by values on separate lines, or use a code block for alignment.",
+    "  Example — instead of a table, write:",
+    "  *AB4003-1-1* — Pongsit Suksomboonpong",
+    "  Bids: 15 · Max: $1,890 · Closes: 3:14 PM",
+    "",
+    "  Or for dense data, use a code block:",
+    "  ```",
+    "  Art Code     Artist                  Bids  Max Bid",
+    "  AB4003-1-1   Pongsit Suksomboonpong   15   $1,890",
+    "  AB4003-1-2   Ploy Makaew               4   $1,190",
+    "  ```",
+    "• Format currency with $ and commas ($1,890.00 not 1890.00)",
+    "• Format dates/times in a human-readable way (Jan 15, 2025 at 3:14 PM, not 2025-01-15T15:14:15Z)",
+    "• Keep responses concise — Slack messages should be scannable, not walls of text."
+  ].join("\n");
 
   const messages = [
     {
@@ -100,84 +132,114 @@ async function run_openai_tool_routing({
   ];
 
   const openai_tools = build_openai_tools(tool_definitions);
+  const all_executed_tool_calls = [];
+  let total_tool_calls = 0;
+  const MAX_ROUNDS = 5;
 
-  const first_response = await openai_client.chat.completions.create({
-    model: model_name,
-    messages,
-    tools: openai_tools,
-    tool_choice: "auto",
-    max_tokens: max_output_tokens
-  });
+  // Loop: keep calling OpenAI until it stops requesting tools or we hit limits
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const response = await openai_client.chat.completions.create({
+      model: model_name,
+      messages,
+      tools: openai_tools,
+      tool_choice: "auto",
+      max_tokens: max_output_tokens
+    });
 
-  const first_message = first_response.choices?.[0]?.message;
-  const first_text = extract_text_from_message(first_message?.content);
-  const tool_calls = Array.isArray(first_message?.tool_calls) ? first_message.tool_calls : [];
+    const assistant_message = response.choices?.[0]?.message;
+    const tool_calls = Array.isArray(assistant_message?.tool_calls) ? assistant_message.tool_calls : [];
 
-  if (tool_calls.length === 0) {
-    return {
-      response_text: first_text || "No action was required.",
-      executed_tool_calls: []
-    };
+    // No tool calls — model is done, return the final text
+    if (tool_calls.length === 0) {
+      const final_text = extract_text_from_message(assistant_message?.content);
+      return {
+        response_text: final_text || "No action was required.",
+        executed_tool_calls: all_executed_tool_calls
+      };
+    }
+
+    // Budget check: cap total tool calls across all rounds
+    const remaining_budget = Math.max(max_tool_calls - total_tool_calls, 0);
+    const bounded_tool_calls = tool_calls.slice(0, Math.max(remaining_budget, 1));
+    total_tool_calls += bounded_tool_calls.length;
+
+    // Execute tool calls in parallel
+    const tool_call_results = await Promise.all(
+      bounded_tool_calls.map(async (tool_call) => {
+        const tool_name = tool_call?.function?.name;
+        const arguments_payload = parse_tool_arguments(tool_call?.function?.arguments);
+        const argument_summary = summarize_arguments_payload(arguments_payload);
+
+        logger.info("executing_tool_call", {
+          tool_name,
+          round,
+          ...argument_summary
+        });
+
+        const tool_result = await tool_executor({
+          tool_name,
+          arguments_payload
+        });
+
+        return {
+          tool_call_id: tool_call.id,
+          tool_name,
+          argument_summary,
+          tool_result
+        };
+      })
+    );
+
+    // Track all executed calls
+    for (const item of tool_call_results) {
+      all_executed_tool_calls.push({
+        tool_name: item.tool_name,
+        ...item.argument_summary
+      });
+    }
+
+    // Append assistant message + tool results to conversation
+    messages.push({
+      role: "assistant",
+      content: assistant_message?.content || "",
+      tool_calls: bounded_tool_calls
+    });
+
+    for (const item of tool_call_results) {
+      messages.push({
+        role: "tool",
+        tool_call_id: item.tool_call_id,
+        content: JSON.stringify(item.tool_result)
+      });
+    }
+
+    // If we've exhausted the tool call budget, do one final call without tools
+    if (total_tool_calls >= max_tool_calls) {
+      const final_response = await openai_client.chat.completions.create({
+        model: model_name,
+        messages,
+        max_tokens: max_output_tokens
+      });
+
+      const final_text = extract_text_from_message(final_response.choices?.[0]?.message?.content);
+      return {
+        response_text: final_text || "Tool execution completed.",
+        executed_tool_calls: all_executed_tool_calls
+      };
+    }
   }
 
-  const bounded_tool_calls = tool_calls.slice(0, Math.max(max_tool_calls, 1));
-
-  const tool_call_results = await Promise.all(
-    bounded_tool_calls.map(async (tool_call) => {
-      const tool_name = tool_call?.function?.name;
-      const arguments_payload = parse_tool_arguments(tool_call?.function?.arguments);
-      const argument_summary = summarize_arguments_payload(arguments_payload);
-
-      logger.info("executing_tool_call", {
-        tool_name,
-        ...argument_summary
-      });
-
-      const tool_result = await tool_executor({
-        tool_name,
-        arguments_payload
-      });
-
-      return {
-        tool_call_id: tool_call.id,
-        tool_name,
-        argument_summary,
-        tool_result
-      };
-    })
-  );
-
-  const tool_result_messages = tool_call_results.map((item) => ({
-    role: "tool",
-    tool_call_id: item.tool_call_id,
-    content: JSON.stringify(item.tool_result)
-  }));
-
-  const executed_tool_calls = tool_call_results.map((item) => ({
-    tool_name: item.tool_name,
-    ...item.argument_summary
-  }));
-
-  const followup_response = await openai_client.chat.completions.create({
+  // Safety: if we somehow exhaust MAX_ROUNDS, do a final text-only call
+  const fallback_response = await openai_client.chat.completions.create({
     model: model_name,
-    messages: [
-      ...messages,
-      {
-        role: "assistant",
-        content: first_message?.content || "",
-        tool_calls: bounded_tool_calls
-      },
-      ...tool_result_messages
-    ],
+    messages,
     max_tokens: max_output_tokens
   });
 
-  const followup_message = followup_response.choices?.[0]?.message;
-  const followup_text = extract_text_from_message(followup_message?.content);
-
+  const fallback_text = extract_text_from_message(fallback_response.choices?.[0]?.message?.content);
   return {
-    response_text: followup_text || "Tool execution completed.",
-    executed_tool_calls
+    response_text: fallback_text || "Tool execution completed.",
+    executed_tool_calls: all_executed_tool_calls
   };
 }
 

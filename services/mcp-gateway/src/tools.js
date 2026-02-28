@@ -5,6 +5,21 @@ export {
   load_allowed_tools_manifest
 } from "@abcodex/shared/tool_manifest.js";
 
+import { data_read_tools } from "./tools/data_read.js";
+import { profile_integrity_tools } from "./tools/profile_integrity.js";
+import { payments_tools } from "./tools/payments.js";
+import { growth_marketing_tools } from "./tools/growth_marketing.js";
+import { platform_ops_tools } from "./tools/platform_ops.js";
+
+// Unified tool registry — all domain modules merged into a single lookup map
+const tool_registry = {
+  ...data_read_tools,
+  ...profile_integrity_tools,
+  ...payments_tools,
+  ...growth_marketing_tools,
+  ...platform_ops_tools
+};
+
 function validate_value_against_schema(value, schema, path_label) {
   const errors = [];
   const schema_type = schema?.type;
@@ -140,64 +155,14 @@ function validate_tool_arguments(tool_definition, arguments_payload) {
   };
 }
 
-async function execute_tool_by_name(tool_name, arguments_payload, service_config) {
-  if (tool_name === "get_event_details") {
-    return {
-      eid: arguments_payload.eid,
-      name: `Event ${arguments_payload.eid}`,
-      event_start_datetime: "2026-03-14T19:00:00Z",
-      venue: "TBD",
-      currency: "USD",
-      source: "stub"
-    };
+async function execute_tool_by_name(tool_name, arguments_payload, service_config, { sql, edge } = {}) {
+  const handler = tool_registry[tool_name];
+
+  if (!handler) {
+    throw new Error(`Unknown tool: ${tool_name}`);
   }
 
-  if (tool_name === "get_live_voting_status") {
-    return {
-      eid: arguments_payload.eid,
-      round: arguments_payload.round || 1,
-      raw_vote_count: 0,
-      weighted_vote_total: 0,
-      source: "stub"
-    };
-  }
-
-  if (tool_name === "get_auction_status") {
-    return {
-      eid: arguments_payload.eid,
-      total_artworks: 0,
-      active_auctions: 0,
-      closed_auctions: 0,
-      source: "stub"
-    };
-  }
-
-  if (tool_name === "get_payment_summary") {
-    return {
-      eid: arguments_payload.eid,
-      payments_pending: 0,
-      payments_processing: 0,
-      payments_paid: 0,
-      source: "stub"
-    };
-  }
-
-  if (tool_name === "process_artist_payment") {
-    if (!service_config.gateway.enable_mutating_tools) {
-      throw new Error("Mutating tools are disabled by policy");
-    }
-
-    return {
-      eid: arguments_payload.eid,
-      artist_profile_id: arguments_payload.artist_profile_id,
-      amount: arguments_payload.amount,
-      currency: arguments_payload.currency,
-      status: "queued",
-      source: "stub"
-    };
-  }
-
-  throw new Error(`Unknown tool: ${tool_name}`);
+  return handler(arguments_payload, sql, edge, service_config);
 }
 
 export {

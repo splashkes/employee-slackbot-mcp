@@ -42,12 +42,12 @@ test("namespaces include orchestration, execution, and shared", () => {
   assert.ok(namespace_names.includes("shared"), "Missing shared namespace for Redis");
 });
 
-test("secrets template has REDIS_URL pointing to shared namespace", () => {
+test("secrets template has REDIS_URL configured", () => {
   const secrets_text = fs.readFileSync(path.join(base_dir, "secrets.template.yaml"), "utf8");
   const redis_urls = [...secrets_text.matchAll(/REDIS_URL:\s*(\S+)/g)].map((m) => m[1]);
   assert.ok(redis_urls.length > 0, "No REDIS_URL found in secrets");
   for (const url of redis_urls) {
-    assert.match(url, /\.shared\.svc/, `REDIS_URL ${url} does not reference shared namespace`);
+    assert.match(url, /^rediss?:\/\//, `REDIS_URL ${url} is not a valid redis:// or rediss:// URL`);
   }
 });
 
@@ -60,24 +60,28 @@ test("network policies include ingress rules for orchestration-api", () => {
   assert.ok(api_ingress.includes("port: 3000"), "orchestration-api ingress must allow port 3000");
 });
 
-test("network policies allow Redis egress to shared namespace (not cross-plane)", () => {
+test("network policies allow egress for Redis (managed external) and DNS", () => {
   const docs = load_yaml_documents("networkpolicy.yaml");
   const orchestration_egress = docs.find((d) => d.includes("orchestration-egress-policy"));
   assert.ok(orchestration_egress, "Missing orchestration-egress-policy");
   assert.ok(
-    orchestration_egress.includes("kubernetes.io/metadata.name: shared"),
-    "Orchestration egress must target shared namespace for Redis"
+    orchestration_egress.includes("port: 25061"),
+    "Orchestration egress must allow Redis port 25061"
   );
   assert.ok(
-    !orchestration_egress.includes("kubernetes.io/metadata.name: artbattle-execution"),
-    "Orchestration egress should not target execution namespace for Redis"
+    orchestration_egress.includes("port: 53"),
+    "Orchestration egress must allow DNS port 53"
   );
 
   const execution_egress = docs.find((d) => d.includes("execution-egress-policy"));
   assert.ok(execution_egress, "Missing execution-egress-policy");
   assert.ok(
-    execution_egress.includes("kubernetes.io/metadata.name: shared"),
-    "Execution egress must target shared namespace for Redis"
+    execution_egress.includes("port: 25061"),
+    "Execution egress must allow Redis port 25061"
+  );
+  assert.ok(
+    execution_egress.includes("port: 5432"),
+    "Execution egress must allow Postgres port 5432"
   );
 });
 
@@ -94,8 +98,8 @@ test("all deployment images reference ghcr.io/splashkes/", () => {
     for (const image_ref of image_lines) {
       assert.match(
         image_ref,
-        /^ghcr\.io\/splashkes\//,
-        `Image in ${file_name} does not reference ghcr.io/splashkes/: ${image_ref}`
+        /^registry\.digitalocean\.com\/esbmcp\//,
+        `Image in ${file_name} does not reference registry.digitalocean.com/esbmcp/: ${image_ref}`
       );
     }
   }
@@ -104,5 +108,5 @@ test("all deployment images reference ghcr.io/splashkes/", () => {
 test("services expose expected ports", () => {
   const services_text = fs.readFileSync(path.join(base_dir, "services.yaml"), "utf8");
   assert.match(services_text, /port: 3000/, "orchestration-api service must expose port 3000");
-  assert.match(services_text, /port: 8080/, "orchestration-supervisor service must expose port 8080");
+  assert.match(services_text, /port: 8081/, "orchestration-supervisor service must expose port 8081");
 });

@@ -8,11 +8,12 @@ COPY package.json package-lock.json ./
 # Copy shared package
 COPY packages/shared/ ./packages/shared/
 
-# Copy service package.json
+# Copy ALL service package.json files so npm can resolve the full workspace
+COPY services/slackbot/package.json ./services/slackbot/
 COPY services/mcp-gateway/package.json ./services/mcp-gateway/
 
-# Install production dependencies for the mcp-gateway workspace
-RUN npm ci --omit=dev --workspace=services/mcp-gateway
+# Install all production dependencies
+RUN npm ci --omit=dev
 
 # ---
 
@@ -20,9 +21,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Copy hoisted root modules + service-level modules (npm may split across both)
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages ./packages
-COPY --from=deps /app/services/mcp-gateway/node_modules ./services/mcp-gateway/node_modules 2>/dev/null || true
+COPY --from=deps /app/services/mcp-gateway/node_modules ./services/mcp-gateway/node_modules
 
 # Copy service source and config
 COPY services/mcp-gateway/package.json ./services/mcp-gateway/

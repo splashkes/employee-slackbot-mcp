@@ -4,7 +4,7 @@ metadata:
   name: orchestration-api
   namespace: artbattle-orchestration
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: orchestration-api
@@ -16,10 +16,10 @@ spec:
     spec:
       serviceAccountName: orchestration-api-sa
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: esbmcp
       containers:
         - name: orchestration-api
-          image: ghcr.io/splashkes/orchestration-api:latest
+          image: registry.digitalocean.com/esbmcp/orchestration-api:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -38,6 +38,10 @@ spec:
               value: http://orchestration-supervisor.artbattle-orchestration.svc.cluster.local:8081
             - name: ALLOWED_TOOLS_FILE
               value: /app/config/allowed-tools.json
+            - name: RBAC_MODE
+              value: static
+            - name: RBAC_USER_MAP_JSON
+              value: '{"U0337E73E":"ops"}'
           readinessProbe:
             httpGet:
               path: /readyz

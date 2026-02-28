@@ -89,7 +89,7 @@ spec:
           port: 8081
 ---
 # ---------------------------------------------------------------------------
-# Orchestration egress: allow HTTPS, DNS, and managed Redis (port 25061)
+# Orchestration egress: allow HTTPS, DNS, Postgres, and managed Redis
 # ---------------------------------------------------------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -103,6 +103,17 @@ spec:
   policyTypes:
     - Egress
   egress:
+    # Cluster DNS (CoreDNS in kube-system)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # External services: Slack, OpenAI, Supabase, Redis
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -110,11 +121,11 @@ spec:
         - protocol: TCP
           port: 443
         - protocol: TCP
-          port: 25061
-        - protocol: UDP
-          port: 53
+          port: 5432
         - protocol: TCP
-          port: 53
+          port: 6543
+        - protocol: TCP
+          port: 25061
 ---
 # ---------------------------------------------------------------------------
 # Execution egress: allow HTTPS, DNS, Postgres, and managed Redis (port 25061)

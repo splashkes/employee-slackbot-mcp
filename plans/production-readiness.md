@@ -49,19 +49,22 @@ Neither service handles `SIGTERM`. Kubernetes sends SIGTERM before killing a pod
 
 ---
 
-## 4. Implement Real Tool Backends (High)
+## 4. Implement Real Tool Backends (High) — ✅ DONE
 
-All 5 tools in `services/mcp-gateway/src/tools.js` (`execute_tool_by_name`) return hardcoded stub data with `"source": "stub"`. The gateway will technically "work" but provide no real value.
+Original 5 stubs replaced with 46 real tools across 5 domain modules, all backed by direct Supabase Postgres SQL.
 
 ### Tasks
 
-- [ ] **4a. Decide on data source connections.** Tools like `get_event_details`, `get_live_voting_status`, `get_auction_status`, `get_payment_summary` need database or API access. Determine which backing service each tool calls (Supabase, Stripe, internal API, etc.).
-- [ ] **4b. Implement `get_event_details`** — query Supabase for event record by `eid`.
-- [ ] **4c. Implement `get_live_voting_status`** — query Supabase for vote counts.
-- [ ] **4d. Implement `get_auction_status`** — query Supabase for auction data.
-- [ ] **4e. Implement `get_payment_summary`** — query Supabase for payment records.
-- [ ] **4f. Implement `process_artist_payment`** — call Stripe API to initiate payout (behind `enable_mutating_tools` gate).
-- [ ] **4g. Add integration tests** for each tool against a test database or mock.
+- [x] **4a. Data source: Supabase Postgres via `postgres` npm package.** Edge Functions for mutations.
+- [x] **4b-f. 46 tools implemented** across 5 domain modules:
+  - `src/tools/data_read.js` — 15 read-only SQL tools
+  - `src/tools/profile_integrity.js` — 10 tools (4 write-gated)
+  - `src/tools/payments.js` — 9 tools (2 write-gated)
+  - `src/tools/growth_marketing.js` — 7 read-only tools
+  - `src/tools/platform_ops.js` — 5 read-only tools
+- [x] **4g. Smart skill selection** — AI system prompt acts as skill selector, employees don't need tool names.
+- [x] **4h. Observability** — `esbmcp_` tables for chat sessions, tool executions, audit log, errors, feedback.
+- [ ] **4i. Integration tests** against real DB (deferred to first deploy).
 
 ---
 
@@ -177,18 +180,21 @@ Phase 3 — Connect Slack                                   ⚠️ MANUAL
      Deploy to cluster                                     ⬜ (manual)
      Verify /ab command and @mention work                  ⬜ (manual)
 
-Phase 4 — Real tool backends                              ⬜ NOT STARTED
-  4. Implement real tool backends              [High]     ⬜
+Phase 4 — Real tool backends                              ✅ DONE
+  4. Implement real tool backends              [High]     ✅ (46 tools)
   8. Provision Redis (if needed)               [Medium]   ✅ (deferred — not needed for v1)
+
+Phase 5 — Observability (run SQL on Supabase)              ⚠️ MANUAL
+     Run sql/001_create_esbmcp_tables.sql                  ✅ (completed 2026-02-28)
+     Run sql/002_create_esbmcp_views.sql                   ✅ (completed 2026-02-28)
 ```
 
 ---
 
 ## Out of Scope (tracked separately)
 
-- Execution runner pool code (5 runner services don't exist yet).
-- Orchestration supervisor as a distinct service (currently the gateway serves this role).
+- Execution runner pool code (5 runner services reserved for async agents).
 - Async agent / gatherer pattern and Redis Streams event bus.
 - CI/CD pipeline automation.
-- Monitoring, alerting, and observability stack.
-- Deferred skill IDs (27, 44-49) from the architecture doc.
+- Event creation tool (needs admin SPA validation matching).
+- Integration tests against real Supabase database.

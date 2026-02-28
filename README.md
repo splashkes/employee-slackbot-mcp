@@ -1,50 +1,70 @@
-# Art Battle Orchestration + Execution Platform
+# Art Battle Employee Slackbot
 
-This repository uses one canonical architecture:
-1. `docs/architecture/orchestration-execution-plane.md` - system design.
-2. `deploy/k8s/base` - single Kubernetes topology (no overlays, no versioned alternates).
-3. `deploy/k8s/base/execution-capability-catalog.json` - skill coverage map for execution domains.
+An internal Slack assistant that lets Art Battle employees query operational data in natural language. Employees describe their problem — the AI selects the right tools automatically.
 
 ## Architecture
 
+- **Slackbot** (`services/slackbot/`) — Slack ingress, OpenAI routing, session logging
+- **MCP Gateway** (`services/mcp-gateway/`) — 46 tools across 5 domains, direct Supabase SQL
+- **Observability** — `esbmcp_` tables for sessions, tool executions, audit, errors, feedback
+
 ```bash
-cat docs/architecture/orchestration-execution-plane.md
-cat deploy/k8s/base/execution-capability-catalog.json
+cat docs/architecture/orchestration-execution-plane.md   # canonical architecture
+cat docs/runbook.md                                       # operations guide
 ```
 
-## Deploy (Canonical)
+## Tool Coverage
+
+46 tools covering 80% of 50 operational skill areas:
+
+| Domain | Tools | Examples |
+|--------|-------|---------|
+| data-read | 15 | Event lookup, vote data, auction revenue, Eventbrite |
+| profile-integrity | 10 | Duplicate detection, artist updates, invitations |
+| payments | 9 | Stripe status, payment ledger, artists owed |
+| growth-marketing | 7 | Meta ads, SMS campaigns, offers, sponsorships |
+| platform-ops | 5 | Email/Slack queue health, RLS policies, live diagnostics |
+
+## Deploy
 
 ### Prerequisites
-- A running Kubernetes cluster with an ingress controller (e.g. nginx-ingress).
-- `kubectl` configured against the target cluster.
-- Container images built and pushed to `ghcr.io/splashkes/`.
+- Kubernetes cluster with `kubectl` configured
+- Container images pushed to `ghcr.io/splashkes/`
+- Supabase Postgres connection string
 
 ### Steps
 
-1. **Edit secrets** — replace all placeholders in `secrets.template.yaml` with real values.
-2. **Create image pull secret** — the cluster needs a `ghcr-pull` secret in each namespace to pull from GitHub Container Registry:
-   ```bash
-   for NS in artbattle-orchestration artbattle-execution; do
-     kubectl create secret docker-registry ghcr-pull \
-       --docker-server=ghcr.io \
-       --docker-username=splashkes \
-       --docker-password=<GITHUB_PAT> \
-       -n $NS
-   done
-   ```
-3. **Configure ingress** — in `ingress.yaml`, replace `REPLACE_ME_HOSTNAME` with the domain that Slack webhooks will hit. Configure TLS via cert-manager or a pre-provisioned secret. If using Slack Socket Mode, the ingress resource can be removed.
-4. **Apply:**
-
 ```bash
+# 1. Run observability migrations on Supabase (one-time)
+psql "$SUPABASE_DB_URL" -f sql/001_create_esbmcp_tables.sql
+psql "$SUPABASE_DB_URL" -f sql/002_create_esbmcp_views.sql
+
+# 2. Edit secrets
+vi deploy/k8s/base/secrets.template.yaml
+
+# 3. Create image pull secret
+for NS in artbattle-orchestration artbattle-execution; do
+  kubectl create secret docker-registry ghcr-pull \
+    --docker-server=ghcr.io \
+    --docker-username=splashkes \
+    --docker-password=<GITHUB_PAT> \
+    -n $NS
+done
+
+# 4. Apply
 kubectl apply -f deploy/k8s/base/secrets.template.yaml
 kubectl apply -k deploy/k8s/base
 ```
 
-### External traffic
+## Development
 
-Slack Events API webhooks and slash commands require a publicly reachable HTTPS endpoint. The `ingress.yaml` resource routes external traffic to the `orchestration-api` service on port 3000. If your cluster uses a different ingress mechanism (ALB, Istio, etc.), adapt accordingly.
-
-If you use **Socket Mode** (`SLACK_USE_SOCKET_MODE=true`), the bot connects outbound to Slack and no ingress is required.
+```bash
+npm install
+npm run dev:slackbot        # start slackbot with --watch
+npm run dev:mcp-gateway     # start gateway with --watch
+npm run check               # syntax check all files
+npm test                    # run test suite
+```
 
 ## Validation
 

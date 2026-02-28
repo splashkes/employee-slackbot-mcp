@@ -1,15 +1,25 @@
 {
-  "version": "1.0.0",
-  "updated_at": "2026-02-27T00:00:00Z",
+  "version": "2.0.0",
+  "updated_at": "2026-02-28T00:00:00Z",
   "tools": [
     {
-      "tool_name": "get_event_details",
-      "description": "Return basic event details by EID.",
+      "tool_name": "lookup_event",
+      "description": "Look up event details by EID including venue, city, dates, currency, and status. Use when someone asks about an event, wants event info, or references an event ID like AB4001.",
       "risk_level": "low",
-      "allowed_roles": ["ops", "event-producer", "finance"],
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "marketing",
+        "viewer"
+      ],
       "requires_confirmation": false,
-      "max_calls_per_request": 2,
-      "redaction_rules": ["mask_phone", "mask_email"],
+      "max_calls_per_request": 3,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
       "parameters_schema": {
         "type": "object",
         "properties": {
@@ -18,18 +28,143 @@
             "description": "Event identifier such as AB4001"
           }
         },
-        "required": ["eid"],
+        "required": [
+          "eid"
+        ],
         "additionalProperties": false
       }
     },
     {
-      "tool_name": "get_live_voting_status",
-      "description": "Return current voting status for an event and optional round.",
+      "tool_name": "lookup_person",
+      "description": "Search for a person/user by email, phone, or name. Use when someone asks to find an attendee, bidder, voter, or any user in the system.",
       "risk_level": "low",
-      "allowed_roles": ["ops", "event-producer"],
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 3,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query (email, phone, or name)"
+          },
+          "search_by": {
+            "type": "string",
+            "enum": [
+              "email",
+              "phone",
+              "name"
+            ],
+            "description": "Field to search by (default: email)"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "lookup_artist_profile",
+      "description": "Look up an artist profile by name, UUID, or person_id. Use when someone asks about an artist, wants artist info, or needs to find an artist.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 3,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Artist name, UUID, or person_id"
+          },
+          "search_by": {
+            "type": "string",
+            "enum": [
+              "name",
+              "id",
+              "person_id"
+            ],
+            "description": "Field to search by (default: name)"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "lookup_artwork_bids",
+      "description": "Look up artworks and their bids for an event, optionally filtered by artist. Use when someone asks about artwork sales, bids, or auction activity at an event.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "viewer"
+      ],
       "requires_confirmation": false,
       "max_calls_per_request": 2,
-      "redaction_rules": ["mask_phone", "mask_email"],
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "artist_profile_id": {
+            "type": "string",
+            "description": "Optional artist profile UUID to filter by"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_vote_data",
+      "description": "Get detailed voting data for an event including votes, weights, and per-round summaries. Use when someone asks about voting results, vote counts, weighted votes, or voting patterns.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
       "parameters_schema": {
         "type": "object",
         "properties": {
@@ -38,21 +173,29 @@
           },
           "round": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "description": "Optional round number to filter"
           }
         },
-        "required": ["eid"],
+        "required": [
+          "eid"
+        ],
         "additionalProperties": false
       }
     },
     {
-      "tool_name": "get_auction_status",
-      "description": "Return current auction status for an event.",
+      "tool_name": "debug_event_visibility",
+      "description": "Debug why an event might not be visible to the public. Checks is_public, is_visible, is_test, published_at, status flags, and cache versions. Use when someone reports an event is missing or not showing up.",
       "risk_level": "low",
-      "allowed_roles": ["ops", "event-producer", "finance"],
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
       "requires_confirmation": false,
       "max_calls_per_request": 2,
-      "redaction_rules": ["mask_phone", "mask_email"],
+      "redaction_rules": [],
       "parameters_schema": {
         "type": "object",
         "properties": {
@@ -60,18 +203,25 @@
             "type": "string"
           }
         },
-        "required": ["eid"],
+        "required": [
+          "eid"
+        ],
         "additionalProperties": false
       }
     },
     {
-      "tool_name": "get_payment_summary",
-      "description": "Return aggregated payment summary for an event.",
-      "risk_level": "medium",
-      "allowed_roles": ["finance", "ops"],
+      "tool_name": "get_event_config",
+      "description": "Get the full event configuration row from the database. Use when someone needs to see all settings for an event or debug event configuration issues.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
       "requires_confirmation": false,
-      "max_calls_per_request": 1,
-      "redaction_rules": ["mask_phone", "mask_email", "mask_card_data"],
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
       "parameters_schema": {
         "type": "object",
         "properties": {
@@ -79,18 +229,589 @@
             "type": "string"
           }
         },
-        "required": ["eid"],
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "run_event_health_check",
+      "description": "Run health checks on an event to find missing or misconfigured settings. Checks venue, city, currency, start time, artists, and linter rules. Use when someone asks if an event is ready or wants to validate event setup.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_event_summary",
+      "description": "Get a post-event summary with artwork, bid, and vote statistics. Use when someone asks for a recap, summary, or report of a completed event.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "marketing",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_bid_history",
+      "description": "Get bid history for an event, optionally filtered by artwork. Use when someone asks about bids, bidding activity, top bids, or auction participants.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          },
+          "art_id": {
+            "type": "string",
+            "description": "Optional artwork UUID to filter"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_auction_timing",
+      "description": "Get auction timing details \u2014 artwork closing times, round start/end times. Use when someone asks about auction schedule, closing times, or round timing.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_auction_revenue",
+      "description": "Get auction revenue totals with optional breakdown by artist or round. Use when someone asks about sales totals, revenue, or how much was raised at an event.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "finance",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          },
+          "group_by": {
+            "type": "string",
+            "enum": [
+              "total",
+              "artist",
+              "round"
+            ],
+            "description": "How to group revenue (default: total)"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_eventbrite_data",
+      "description": "Get cached Eventbrite ticket data for an event. Use when someone asks about Eventbrite ticket sales, attendee counts, or event registration data.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "marketing",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_eventbrite_mapping",
+      "description": "Check which Eventbrite event ID is linked to an AB event. Use when someone needs to verify the Eventbrite-to-AB event mapping.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_eventbrite_fees",
+      "description": "Get Eventbrite fee and tax breakdown for an event's ticket sales. Use when someone asks about ticket fees, tax amounts, or net ticket revenue.",
+      "risk_level": "low",
+      "domain": "data-read",
+      "allowed_roles": [
+        "ops",
+        "finance",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "find_duplicate_profiles",
+      "description": "Find potential duplicate artist profiles by phone, email, or similar name. Use when someone suspects duplicate artist entries or needs to clean up artist data.",
+      "risk_level": "low",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 3,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Phone, email, or name to search for duplicates"
+          },
+          "search_by": {
+            "type": "string",
+            "enum": [
+              "phone",
+              "email",
+              "name"
+            ],
+            "description": "Match field (default: phone)"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "update_artist_name",
+      "description": "Update an artist's display name. WRITE OPERATION. Use when someone asks to rename an artist or fix an artist name spelling.",
+      "risk_level": "high",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops"
+      ],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "artist_profile_id": {
+            "type": "string",
+            "description": "UUID of artist profile"
+          },
+          "new_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "artist_profile_id",
+          "new_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "update_artist_bio",
+      "description": "Update an artist's ABHQ bio text. WRITE OPERATION. Use when someone asks to update or fix an artist bio.",
+      "risk_level": "medium",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops"
+      ],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "artist_profile_id": {
+            "type": "string",
+            "description": "UUID of artist profile"
+          },
+          "new_bio": {
+            "type": "string",
+            "maxLength": 5000
+          }
+        },
+        "required": [
+          "artist_profile_id",
+          "new_bio"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "update_artist_country",
+      "description": "Update an artist's country code. WRITE OPERATION. Use when someone asks to correct an artist's country.",
+      "risk_level": "medium",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops"
+      ],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "artist_profile_id": {
+            "type": "string",
+            "description": "UUID of artist profile"
+          },
+          "new_country": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 3,
+            "description": "ISO 2 or 3 letter country code"
+          }
+        },
+        "required": [
+          "artist_profile_id",
+          "new_country"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_artist_invitations",
+      "description": "View artist invitations for an event or artist profile. Use when someone asks about which artists are invited, their invitation status, or confirmations.",
+      "risk_level": "low",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "artist_profile_id": {
+            "type": "string",
+            "description": "Artist profile UUID"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "send_artist_invitation",
+      "description": "Send an invitation to an artist for an event. WRITE OPERATION via edge function. Use when someone asks to invite a specific artist to compete at an event.",
+      "risk_level": "high",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops",
+        "event-producer"
+      ],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          },
+          "artist_profile_id": {
+            "type": "string",
+            "description": "UUID of artist profile to invite"
+          }
+        },
+        "required": [
+          "eid",
+          "artist_profile_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_event_readiness",
+      "description": "Check overall event readiness \u2014 venue, city, currency, artists, Eventbrite link, visibility, and invitation status. Use when someone asks if an event is ready to go live or needs a pre-event checklist.",
+      "risk_level": "low",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_vote_weights",
+      "description": "Get detailed vote weight data and factor breakdown for an event. Use when someone asks about vote weighting, factor types, or wants to audit vote calculations.",
+      "risk_level": "low",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          },
+          "round": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional round number"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "refresh_vote_weights",
+      "description": "Manually trigger a vote weight recalculation for an event. WRITE OPERATION. Use when vote weights seem stale or incorrect and need to be recalculated.",
+      "risk_level": "high",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops"
+      ],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_qr_scan_status",
+      "description": "View QR code scan activity for an event or person. Use when someone asks about QR check-ins, scan counts, or attendance tracking.",
+      "risk_level": "low",
+      "domain": "profile-integrity",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "person_id": {
+            "type": "string",
+            "description": "Person UUID"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_artist_stripe_status",
+      "description": "Check an artist's Stripe account status \u2014 whether they have a connected account, if charges and payouts are enabled. Use when someone asks about artist payment setup or Stripe onboarding status.",
+      "risk_level": "low",
+      "domain": "payments",
+      "allowed_roles": [
+        "finance",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "artist_profile_id": {
+            "type": "string",
+            "description": "Artist profile UUID"
+          },
+          "eid": {
+            "type": "string",
+            "description": "Event identifier (to see all artists at event)"
+          }
+        },
         "additionalProperties": false
       }
     },
     {
       "tool_name": "process_artist_payment",
-      "description": "Process an artist payment request for a specific event and artist profile.",
+      "description": "Process a payment to an artist via Stripe. WRITE OPERATION. Use when finance team needs to trigger an artist payment.",
       "risk_level": "high",
-      "allowed_roles": ["finance"],
+      "domain": "payments",
+      "allowed_roles": [
+        "finance"
+      ],
       "requires_confirmation": true,
       "max_calls_per_request": 1,
-      "redaction_rules": ["mask_phone", "mask_email", "mask_card_data"],
+      "redaction_rules": [
+        "mask_phone",
+        "mask_email",
+        "mask_card_data"
+      ],
       "parameters_schema": {
         "type": "object",
         "properties": {
@@ -109,7 +830,537 @@
             "type": "string"
           }
         },
-        "required": ["eid", "artist_profile_id", "amount", "currency"],
+        "required": [
+          "eid",
+          "artist_profile_id",
+          "amount",
+          "currency"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_exchange_rates",
+      "description": "Look up currency exchange rates used for payments. Use when someone asks about exchange rates, currency conversion, or payment amounts in different currencies.",
+      "risk_level": "low",
+      "domain": "payments",
+      "allowed_roles": [
+        "finance",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "base_currency": {
+            "type": "string",
+            "description": "Base currency code (e.g. USD)"
+          },
+          "target_currency": {
+            "type": "string",
+            "description": "Target currency code (e.g. CAD)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_manual_payment_requests",
+      "description": "View manual payment requests (wire transfer, cheque, etc.). Use when someone asks about manual payment status, pending payment requests, or non-Stripe payments.",
+      "risk_level": "low",
+      "domain": "payments",
+      "allowed_roles": [
+        "finance",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "status": {
+            "type": "string",
+            "description": "Filter by status"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_artist_payment_ledger",
+      "description": "View the full payment ledger for an artist or event \u2014 all payments made, amounts, and statuses. Use when someone asks about payment history, what an artist has been paid, or wants a payment audit trail.",
+      "risk_level": "low",
+      "domain": "payments",
+      "allowed_roles": [
+        "finance",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_email",
+        "mask_card_data"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "artist_profile_id": {
+            "type": "string",
+            "description": "Artist profile UUID"
+          },
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_artists_owed",
+      "description": "List all artists who are owed money for an event \u2014 shows sales vs payments made and outstanding balance. Use when someone asks who still needs to be paid, outstanding artist payments, or unpaid artists.",
+      "risk_level": "low",
+      "domain": "payments",
+      "allowed_roles": [
+        "finance",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_payment_status_health",
+      "description": "Cross-check art sale statuses against payment records to find discrepancies \u2014 sold artwork with no payment, payment status mismatches. Use when someone asks about payment health or wants to audit payment completeness.",
+      "risk_level": "low",
+      "domain": "payments",
+      "allowed_roles": [
+        "finance",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_payment_invitations",
+      "description": "View payment setup invitations sent to artists (Stripe onboarding invites). Use when someone asks about payment invitation status, who has been invited to set up payments, or onboarding progress.",
+      "risk_level": "low",
+      "domain": "payments",
+      "allowed_roles": [
+        "finance",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "artist_profile_id": {
+            "type": "string",
+            "description": "Artist profile UUID"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "send_payment_reminder",
+      "description": "Send a payment setup reminder to an artist. WRITE OPERATION via edge function. Use when someone asks to remind an artist to set up their payment method.",
+      "risk_level": "high",
+      "domain": "payments",
+      "allowed_roles": [
+        "finance"
+      ],
+      "requires_confirmation": true,
+      "max_calls_per_request": 1,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          },
+          "artist_profile_id": {
+            "type": "string",
+            "description": "UUID of artist profile"
+          }
+        },
+        "required": [
+          "eid",
+          "artist_profile_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_meta_ads_data",
+      "description": "Get Meta (Facebook/Instagram) ads performance data for an event \u2014 impressions, clicks, spend, conversions. Use when someone asks about ad performance, marketing spend, or campaign results.",
+      "risk_level": "low",
+      "domain": "growth-marketing",
+      "allowed_roles": [
+        "marketing",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_sms_campaigns",
+      "description": "View SMS marketing campaigns for an event. Use when someone asks about text message campaigns, SMS marketing status, or message delivery stats.",
+      "risk_level": "low",
+      "domain": "growth-marketing",
+      "allowed_roles": [
+        "marketing",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "status": {
+            "type": "string",
+            "description": "Filter by campaign status"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_sms_audience_count",
+      "description": "Get the estimated audience size for an SMS campaign by audience filter type. Use when someone asks how many people would receive an SMS campaign or wants to estimate reach.",
+      "risk_level": "low",
+      "domain": "growth-marketing",
+      "allowed_roles": [
+        "marketing",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          },
+          "audience_filter": {
+            "type": "string",
+            "enum": [
+              "event_attendees",
+              "bidders",
+              "all_with_phone"
+            ],
+            "description": "Audience segment (default: event_attendees)"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_sms_conversation",
+      "description": "View the SMS conversation history for a phone number \u2014 both inbound and outbound messages. Use when someone asks about SMS replies, text conversations, or message history with a person.",
+      "risk_level": "low",
+      "domain": "growth-marketing",
+      "allowed_roles": [
+        "marketing",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_phone"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "Phone number to look up conversation for"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_notification_status",
+      "description": "Check the status of SMS notifications and message queue for an event \u2014 sent, failed, pending counts. Use when someone asks about notification delivery, message failures, or queue health.",
+      "risk_level": "low",
+      "domain": "growth-marketing",
+      "allowed_roles": [
+        "marketing",
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_active_offers",
+      "description": "View promotional offers and their redemption counts for an event. Use when someone asks about promo codes, discounts, special offers, or coupon usage.",
+      "risk_level": "low",
+      "domain": "growth-marketing",
+      "allowed_roles": [
+        "marketing",
+        "ops",
+        "finance",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string",
+            "description": "Event identifier (omit for all active offers)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_sponsorship_summary",
+      "description": "View sponsorship invites, purchases, and committed sponsorship revenue for an event. Use when someone asks about sponsors, sponsorship status, or sponsorship revenue.",
+      "risk_level": "low",
+      "domain": "growth-marketing",
+      "allowed_roles": [
+        "marketing",
+        "ops",
+        "finance",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_slack_queue_health",
+      "description": "Check Slack notification queue health \u2014 sent/failed/pending counts and recent failures. Use when someone reports missing Slack notifications or wants to check notification delivery.",
+      "risk_level": "low",
+      "domain": "platform-db-edge",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_email_queue_stats",
+      "description": "Check email delivery statistics for the last N hours. Use when someone asks about email delivery, failed emails, or email queue health.",
+      "risk_level": "low",
+      "domain": "platform-db-edge",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "hours_back": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 168,
+            "description": "Hours to look back (default: 24)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_email_log",
+      "description": "Search email logs by recipient or event. Use when someone asks about specific emails sent, whether someone received an email, or email delivery status for a person.",
+      "risk_level": "low",
+      "domain": "platform-db-edge",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [
+        "mask_email"
+      ],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "recipient": {
+            "type": "string",
+            "description": "Email address or partial match"
+          },
+          "eid": {
+            "type": "string",
+            "description": "Event identifier"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Max results (default: 20)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "check_rls_policies",
+      "description": "Check Row Level Security policies on database tables. Use when someone asks about RLS configuration, table access policies, or needs to audit database security.",
+      "risk_level": "low",
+      "domain": "platform-db-edge",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Table name (omit for all public schema tables)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "live_event_diagnostic",
+      "description": "Comprehensive live event diagnostic \u2014 event config, rounds, contestants, artworks with bid/vote counts, vote weight summary, and cache status. Use during a live event when someone reports issues, or for a complete event status check.",
+      "risk_level": "low",
+      "domain": "platform-db-edge",
+      "allowed_roles": [
+        "ops",
+        "event-producer",
+        "viewer"
+      ],
+      "requires_confirmation": false,
+      "max_calls_per_request": 2,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eid"
+        ],
         "additionalProperties": false
       }
     }

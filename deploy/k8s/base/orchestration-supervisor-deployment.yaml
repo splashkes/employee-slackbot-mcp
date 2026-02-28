@@ -4,7 +4,7 @@ metadata:
   name: orchestration-supervisor
   namespace: artbattle-orchestration
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: orchestration-supervisor
@@ -16,10 +16,10 @@ spec:
     spec:
       serviceAccountName: orchestration-supervisor-sa
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: esbmcp
       containers:
         - name: orchestration-supervisor
-          image: ghcr.io/splashkes/orchestration-supervisor:latest
+          image: registry.digitalocean.com/esbmcp/orchestration-supervisor:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8081
