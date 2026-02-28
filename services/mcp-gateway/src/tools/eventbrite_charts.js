@@ -44,6 +44,49 @@ async function eb_fetch_paginated(path, eb_config, rate_limit_ms, collection_key
   return items;
 }
 
+function expand_orders_to_attendees(order_rows) {
+  const attendees = [];
+  for (const o of order_rows) {
+    const count = Math.min(o.attendee_count || 1, 200);
+    const per_ticket = o.gross ? parseFloat(o.gross) / count : 0;
+    for (let i = 0; i < count; i++) {
+      attendees.push({
+        created: o.order_created,
+        costs: { gross: { major_value: String(per_ticket) } }
+      });
+    }
+  }
+  return attendees;
+}
+
+async function load_event_attendees(sql, eventbrite_id) {
+  const cache = await sql`
+    SELECT orders_summary, total_tickets_sold, gross_revenue
+    FROM eventbrite_api_cache
+    WHERE eventbrite_id = ${eventbrite_id}
+    ORDER BY fetched_at DESC LIMIT 1
+  `;
+  let attendees = cache[0]?.orders_summary?.attendees || [];
+  const ticket_count = cache[0]?.total_tickets_sold || 0;
+  const revenue = parseFloat(cache[0]?.gross_revenue) || 0;
+
+  // Fallback: build from eventbrite_orders_cache
+  if (attendees.length === 0) {
+    const order_rows = await sql`
+      SELECT order_created, attendee_count, gross
+      FROM eventbrite_orders_cache
+      WHERE eventbrite_event_id = ${eventbrite_id}
+        AND order_status = 'placed'
+      ORDER BY order_created
+    `;
+    if (order_rows.length > 0) {
+      attendees = expand_orders_to_attendees(order_rows);
+    }
+  }
+
+  return { attendees, ticket_count: ticket_count || attendees.length, revenue };
+}
+
 function build_cumulative_timeline(attendees, event_start, event_date) {
   if (!attendees || attendees.length === 0) return [];
 
@@ -347,45 +390,60 @@ async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
   const total_tickets_sold = attendees.length;
   let gross_revenue = 0;
   let taxes_collected = 0;
-  let total_fees = 0;
+  let eventbrite_fees = 0;
+  let payment_processing_fees = 0;
   for (const a of attendees) {
     const costs = a.costs || {};
     gross_revenue += costs.gross?.major_value ? parseFloat(costs.gross.major_value) : 0;
     taxes_collected += costs.tax?.major_value ? parseFloat(costs.tax.major_value) : 0;
-    total_fees += costs.eventbrite_fee?.major_value ? parseFloat(costs.eventbrite_fee.major_value) : 0;
-    total_fees += costs.payment_fee?.major_value ? parseFloat(costs.payment_fee.major_value) : 0;
+    eventbrite_fees += costs.eventbrite_fee?.major_value ? parseFloat(costs.eventbrite_fee.major_value) : 0;
+    payment_processing_fees += costs.payment_fee?.major_value ? parseFloat(costs.payment_fee.major_value) : 0;
   }
+  const total_fees = eventbrite_fees + payment_processing_fees;
   const net_deposit = gross_revenue - total_fees - taxes_collected;
 
-  // UPSERT cache
+  // Strip attendees to only fields needed for timeline charts (prevents multi-MB blob storage)
+  const slim_attendees = attendees.map((a) => ({
+    created: a.created,
+    costs: { gross: { major_value: a.costs?.gross?.major_value } }
+  }));
+
+  // Insert new cache row (table is append-only history, no unique constraint on eventbrite_id)
+  const eb_event_name = eb_event?.name?.text || eb_event?.name || null;
+  const eb_start_date = eb_event?.start?.utc || null;
+  const capacity = (ticket_classes.ticket_classes || []).reduce(
+    (sum, tc) => sum + (tc.quantity_total || 0), 0
+  ) || null;
+
   await sql`
     INSERT INTO eventbrite_api_cache (
-      eventbrite_id, total_tickets_sold, gross_revenue,
-      taxes_collected, total_fees, net_deposit,
-      raw_event, raw_ticket_classes, raw_attendees,
-      fetched_at
+      eid, eventbrite_id, event_id,
+      event_data, ticket_classes, sales_summary, orders_summary,
+      total_tickets_sold, gross_revenue, ticket_revenue,
+      taxes_collected, eventbrite_fees, payment_processing_fees,
+      total_fees, net_deposit, total_capacity,
+      currency_code, api_response_status,
+      fetched_at, expires_at, fetched_by, fetch_reason,
+      eventbrite_event_name, eventbrite_start_date
     ) VALUES (
-      ${event.eventbrite_id}, ${total_tickets_sold},
+      ${eid}, ${event.eventbrite_id}, ${event.id},
+      ${JSON.stringify(eb_event)}, ${JSON.stringify(ticket_classes.ticket_classes || [])},
+      ${JSON.stringify({ orders_count: attendees.length })},
+      ${JSON.stringify({ attendees: slim_attendees })},
+      ${total_tickets_sold},
+      ${Math.round(gross_revenue * 100) / 100},
       ${Math.round(gross_revenue * 100) / 100},
       ${Math.round(taxes_collected * 100) / 100},
+      ${Math.round(eventbrite_fees * 100) / 100},
+      ${Math.round(payment_processing_fees * 100) / 100},
       ${Math.round(total_fees * 100) / 100},
       ${Math.round(net_deposit * 100) / 100},
-      ${JSON.stringify(eb_event)},
-      ${JSON.stringify(ticket_classes)},
-      ${JSON.stringify(attendees)},
-      NOW()
+      ${capacity},
+      ${attendees[0]?.costs?.gross?.currency || 'USD'},
+      'success',
+      NOW(), NOW() + INTERVAL '6 hours', 'mcp-gateway', 'refresh_tool',
+      ${eb_event_name}, ${eb_start_date}
     )
-    ON CONFLICT (eventbrite_id)
-    DO UPDATE SET
-      total_tickets_sold = EXCLUDED.total_tickets_sold,
-      gross_revenue = EXCLUDED.gross_revenue,
-      taxes_collected = EXCLUDED.taxes_collected,
-      total_fees = EXCLUDED.total_fees,
-      net_deposit = EXCLUDED.net_deposit,
-      raw_event = EXCLUDED.raw_event,
-      raw_ticket_classes = EXCLUDED.raw_ticket_classes,
-      raw_attendees = EXCLUDED.raw_attendees,
-      fetched_at = NOW()
   `;
 
   return {
@@ -695,36 +753,17 @@ async function generate_chart({ eid, include_comparators, comparator_eids }, sql
   if (!event.eventbrite_id) return { error: `No Eventbrite ID linked to ${eid}` };
 
   // Refresh data if stale (> 6 hours)
-  const cache = await sql`
-    SELECT fetched_at, raw_attendees, total_tickets_sold, gross_revenue
-    FROM eventbrite_api_cache
+  const staleness_check = await sql`
+    SELECT fetched_at FROM eventbrite_api_cache
     WHERE eventbrite_id = ${event.eventbrite_id}
     ORDER BY fetched_at DESC LIMIT 1
   `;
-
-  let attendees;
-  let ticket_count;
-  let revenue;
-
-  if (cache.length === 0 || (Date.now() - new Date(cache[0].fetched_at).getTime()) > 6 * 3600000) {
-    // Refresh
+  if (staleness_check.length === 0 || (Date.now() - new Date(staleness_check[0].fetched_at).getTime()) > 6 * 3600000) {
     const refresh_result = await refresh_eventbrite_data({ eid, force: true }, sql, _edge, config);
     if (refresh_result.error) return refresh_result;
-
-    const fresh_cache = await sql`
-      SELECT raw_attendees, total_tickets_sold, gross_revenue
-      FROM eventbrite_api_cache
-      WHERE eventbrite_id = ${event.eventbrite_id}
-      ORDER BY fetched_at DESC LIMIT 1
-    `;
-    attendees = fresh_cache[0]?.raw_attendees || [];
-    ticket_count = fresh_cache[0]?.total_tickets_sold || 0;
-    revenue = fresh_cache[0]?.gross_revenue || 0;
-  } else {
-    attendees = cache[0].raw_attendees || [];
-    ticket_count = cache[0].total_tickets_sold || 0;
-    revenue = cache[0].gross_revenue || 0;
   }
+
+  const { attendees, ticket_count, revenue } = await load_event_attendees(sql, event.eventbrite_id);
 
   // Build target timeline
   const target_timeline = build_cumulative_timeline(
@@ -776,15 +815,11 @@ async function generate_chart({ eid, include_comparators, comparator_eids }, sql
       `;
       if (comp_event.length === 0 || !comp_event[0].eventbrite_id) continue;
 
-      const comp_cache = await sql`
-        SELECT raw_attendees FROM eventbrite_api_cache
-        WHERE eventbrite_id = ${comp_event[0].eventbrite_id}
-        ORDER BY fetched_at DESC LIMIT 1
-      `;
-      if (!comp_cache[0]?.raw_attendees) continue;
+      const { attendees: comp_attendees } = await load_event_attendees(sql, comp_event[0].eventbrite_id);
+      if (comp_attendees.length === 0) continue;
 
       const comp_timeline = build_cumulative_timeline(
-        comp_cache[0].raw_attendees,
+        comp_attendees,
         comp_event[0].event_start_datetime,
         comp_event[0].event_start_datetime
       );
@@ -1048,6 +1083,8 @@ const eventbrite_charts_tools = {
 export {
   eventbrite_charts_tools,
   build_cumulative_timeline,
+  expand_orders_to_attendees,
+  load_event_attendees,
   render_chart,
   compute_next_run,
   should_skip_chart,

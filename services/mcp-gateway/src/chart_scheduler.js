@@ -5,6 +5,7 @@
 import { Logger } from "./logger.js";
 import {
   build_cumulative_timeline,
+  load_event_attendees,
   render_chart,
   compute_next_run,
   should_skip_chart,
@@ -66,38 +67,21 @@ function create_chart_scheduler({ sql, config, slack_poster }) {
         throw new Error("EB_PRIVATE_TOKEN not configured");
       }
 
-      // Get cached attendee data (refresh if stale > 6h)
-      const cache = await sql`
-        SELECT fetched_at, raw_attendees, total_tickets_sold, gross_revenue
-        FROM eventbrite_api_cache
+      // Refresh if stale (> 6h), then load attendees
+      const staleness_check = await sql`
+        SELECT fetched_at FROM eventbrite_api_cache
         WHERE eventbrite_id = ${job.eventbrite_id}
         ORDER BY fetched_at DESC LIMIT 1
       `;
-
-      let attendees, ticket_count, revenue;
-
-      if (cache.length === 0 || (Date.now() - new Date(cache[0].fetched_at).getTime()) > 6 * 3600000) {
-        // Need to refresh — import and call the refresh tool directly
+      if (staleness_check.length === 0 || (Date.now() - new Date(staleness_check[0].fetched_at).getTime()) > 6 * 3600000) {
         const { eventbrite_charts_tools } = await import("./tools/eventbrite_charts.js");
         const refresh_result = await eventbrite_charts_tools.refresh_eventbrite_data(
           { eid: job.eid, force: true }, sql, null, config
         );
         if (refresh_result.error) throw new Error(refresh_result.error);
-
-        const fresh_cache = await sql`
-          SELECT raw_attendees, total_tickets_sold, gross_revenue
-          FROM eventbrite_api_cache
-          WHERE eventbrite_id = ${job.eventbrite_id}
-          ORDER BY fetched_at DESC LIMIT 1
-        `;
-        attendees = fresh_cache[0]?.raw_attendees || [];
-        ticket_count = fresh_cache[0]?.total_tickets_sold || 0;
-        revenue = fresh_cache[0]?.gross_revenue || 0;
-      } else {
-        attendees = cache[0].raw_attendees || [];
-        ticket_count = cache[0].total_tickets_sold || 0;
-        revenue = cache[0].gross_revenue || 0;
       }
+
+      const { attendees, ticket_count, revenue } = await load_event_attendees(sql, job.eventbrite_id);
 
       // Build timeline
       const timeline = build_cumulative_timeline(
@@ -148,15 +132,11 @@ function create_chart_scheduler({ sql, config, slack_poster }) {
         `;
         if (comp_event.length === 0 || !comp_event[0].eventbrite_id) continue;
 
-        const comp_cache = await sql`
-          SELECT raw_attendees FROM eventbrite_api_cache
-          WHERE eventbrite_id = ${comp_event[0].eventbrite_id}
-          ORDER BY fetched_at DESC LIMIT 1
-        `;
-        if (!comp_cache[0]?.raw_attendees) continue;
+        const { attendees: comp_attendees } = await load_event_attendees(sql, comp_event[0].eventbrite_id);
+        if (comp_attendees.length === 0) continue;
 
         const comp_timeline = build_cumulative_timeline(
-          comp_cache[0].raw_attendees,
+          comp_attendees,
           comp_event[0].event_start_datetime,
           comp_event[0].event_start_datetime
         );

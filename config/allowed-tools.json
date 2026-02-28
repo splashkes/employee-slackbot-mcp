@@ -628,7 +628,7 @@
           },
           "artist_profile_id": {
             "type": "string",
-            "description": "Artist profile UUID"
+            "description": "Artist profile UUID — use lookup_artist_profile to resolve names to UUIDs first"
           }
         },
         "additionalProperties": false
@@ -795,7 +795,7 @@
         "properties": {
           "artist_profile_id": {
             "type": "string",
-            "description": "Artist profile UUID"
+            "description": "Artist profile UUID — use lookup_artist_profile to resolve names to UUIDs first"
           },
           "eid": {
             "type": "string",
@@ -907,7 +907,7 @@
     },
     {
       "tool_name": "get_artist_payment_ledger",
-      "description": "View the full payment ledger for an artist or event \u2014 all payments made, amounts, and statuses. Use when someone asks about payment history, what an artist has been paid, or wants a payment audit trail.",
+      "description": "View the full payment ledger for an artist or event — all payments made, amounts, and statuses. Use when someone asks about payment history, what an artist has been paid, or wants a payment audit trail. IMPORTANT: artist_profile_id must be a real UUID from the database — do NOT guess or fabricate UUIDs. If you only have an artist name, call lookup_artist_profile or lookup_person FIRST to find their actual profile UUID, then pass it here. You can also query by eid alone to see all payments for an event.",
       "risk_level": "low",
       "domain": "payments",
       "allowed_roles": [
@@ -926,7 +926,7 @@
         "properties": {
           "artist_profile_id": {
             "type": "string",
-            "description": "Artist profile UUID"
+            "description": "Artist profile UUID — use lookup_artist_profile to resolve names to UUIDs first"
           },
           "eid": {
             "type": "string",
@@ -1015,7 +1015,7 @@
           },
           "artist_profile_id": {
             "type": "string",
-            "description": "Artist profile UUID"
+            "description": "Artist profile UUID — use lookup_artist_profile to resolve names to UUIDs first"
           }
         },
         "additionalProperties": false
