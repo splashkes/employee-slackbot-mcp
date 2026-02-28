@@ -18,6 +18,9 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
+# K8s secrets (real values — use secrets.template.yaml for structure)
+deploy/k8s/base/secrets.yaml
+
 # OS / editor noise
 .DS_Store
 .vscode/
