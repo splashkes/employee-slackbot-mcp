@@ -401,6 +401,7 @@ async function handle_prompt({
   const final_response = truncate_text(redacted_text, service_config.limits.response_max_chars);
 
   // Write full session to Postgres
+  const token_usage = routing_result.token_usage || {};
   session_writer.write_session({
     ...origin,
     interaction_type,
@@ -411,6 +412,10 @@ async function handle_prompt({
     tool_call_count: tool_call_details.length,
     status: "completed",
     total_duration_ms,
+    prompt_tokens: token_usage.prompt_tokens || 0,
+    completion_tokens: token_usage.completion_tokens || 0,
+    total_tokens: token_usage.total_tokens || 0,
+    api_rounds: token_usage.api_rounds || 0,
     redaction_rules_applied: response_redaction_rules
   });
 

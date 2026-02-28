@@ -44,6 +44,7 @@ function create_session_writer(sql) {
           ai_response, tools_called, tool_call_count,
           status, error_message, error_id,
           total_duration_ms, ai_first_call_ms, ai_followup_ms,
+          prompt_tokens, completion_tokens, total_tokens, api_rounds,
           redaction_rules_applied, request_id, gateway_version
         ) VALUES (
           ${params.session_id},
@@ -65,6 +66,10 @@ function create_session_writer(sql) {
           ${params.total_duration_ms ?? null},
           ${params.ai_first_call_ms ?? null},
           ${params.ai_followup_ms ?? null},
+          ${params.prompt_tokens || 0},
+          ${params.completion_tokens || 0},
+          ${params.total_tokens || 0},
+          ${params.api_rounds || 0},
           ${JSON.stringify(params.redaction_rules_applied || [])},
           ${params.request_id || null},
           ${params.gateway_version || "0.1.0"}

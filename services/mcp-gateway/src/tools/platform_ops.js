@@ -314,7 +314,9 @@ async function get_bot_sessions({ hours_back, status, user_id, limit }, sql) {
            LEFT(cs.user_prompt, 120) AS prompt_preview,
            cs.tool_call_count, cs.tools_called,
            cs.total_duration_ms, cs.error_message, cs.error_id,
-           cs.ai_model, cs.created_at
+           cs.ai_model,
+           cs.prompt_tokens, cs.completion_tokens, cs.total_tokens, cs.api_rounds,
+           cs.created_at
     FROM esbmcp_chat_sessions cs
     WHERE ${where}
     ORDER BY cs.created_at DESC
@@ -325,17 +327,42 @@ async function get_bot_sessions({ hours_back, status, user_id, limit }, sql) {
   const stats = await sql`
     SELECT status, COUNT(*) AS cnt,
            AVG(total_duration_ms)::int AS avg_duration_ms,
-           AVG(tool_call_count)::numeric(10,1) AS avg_tools
+           AVG(tool_call_count)::numeric(10,1) AS avg_tools,
+           SUM(prompt_tokens) AS total_prompt_tokens,
+           SUM(completion_tokens) AS total_completion_tokens,
+           SUM(total_tokens) AS total_tokens
     FROM esbmcp_chat_sessions
     WHERE created_at > NOW() - (${lookback} || ' hours')::interval
     GROUP BY status
     ORDER BY cnt DESC
   `;
 
+  // Estimate cost based on model (rough pricing in USD per 1M tokens)
+  const model_pricing = {
+    "gpt-4o-mini": { input: 0.15, output: 0.60 },
+    "gpt-4o": { input: 2.50, output: 10.00 },
+    "gpt-4-turbo": { input: 10.00, output: 30.00 }
+  };
+  const all_prompt = stats.reduce((s, r) => s + Number(r.total_prompt_tokens || 0), 0);
+  const all_completion = stats.reduce((s, r) => s + Number(r.total_completion_tokens || 0), 0);
+
+  // Try to determine model from most recent session
+  const model_name = rows[0]?.ai_model || "gpt-4o-mini";
+  const pricing = model_pricing[model_name] || model_pricing["gpt-4o-mini"];
+  const estimated_cost_usd = (all_prompt / 1_000_000) * pricing.input +
+                             (all_completion / 1_000_000) * pricing.output;
+
   return {
     sessions: rows,
     count: rows.length,
     stats,
+    token_totals: {
+      prompt_tokens: all_prompt,
+      completion_tokens: all_completion,
+      total_tokens: all_prompt + all_completion,
+      model: model_name,
+      estimated_cost_usd: Math.round(estimated_cost_usd * 10000) / 10000
+    },
     period_hours: lookback
   };
 }

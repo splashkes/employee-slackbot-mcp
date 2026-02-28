@@ -38,6 +38,12 @@ CREATE TABLE IF NOT EXISTS esbmcp_chat_sessions (
   ai_first_call_ms  int,                       -- time for first OpenAI response
   ai_followup_ms    int,                       -- time for followup response (after tool results)
 
+  -- Token usage (accumulated across all API rounds)
+  prompt_tokens     int         DEFAULT 0,
+  completion_tokens int         DEFAULT 0,
+  total_tokens      int         DEFAULT 0,
+  api_rounds        int         DEFAULT 0,     -- number of OpenAI API calls made
+
   -- Redaction applied
   redaction_rules_applied jsonb DEFAULT '[]',
 

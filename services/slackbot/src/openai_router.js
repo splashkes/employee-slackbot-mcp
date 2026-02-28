@@ -136,6 +136,29 @@ async function run_openai_tool_routing({
   let total_tool_calls = 0;
   const MAX_ROUNDS = 5;
 
+  // Accumulate token usage across all rounds
+  let total_prompt_tokens = 0;
+  let total_completion_tokens = 0;
+  let api_rounds = 0;
+
+  function accumulate_usage(response) {
+    const usage = response?.usage;
+    if (usage) {
+      total_prompt_tokens += usage.prompt_tokens || 0;
+      total_completion_tokens += usage.completion_tokens || 0;
+    }
+    api_rounds++;
+  }
+
+  function build_token_usage() {
+    return {
+      prompt_tokens: total_prompt_tokens,
+      completion_tokens: total_completion_tokens,
+      total_tokens: total_prompt_tokens + total_completion_tokens,
+      api_rounds
+    };
+  }
+
   // Loop: keep calling OpenAI until it stops requesting tools or we hit limits
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const response = await openai_client.chat.completions.create({
@@ -145,6 +168,7 @@ async function run_openai_tool_routing({
       tool_choice: "auto",
       max_tokens: max_output_tokens
     });
+    accumulate_usage(response);
 
     const assistant_message = response.choices?.[0]?.message;
     const tool_calls = Array.isArray(assistant_message?.tool_calls) ? assistant_message.tool_calls : [];
@@ -154,7 +178,8 @@ async function run_openai_tool_routing({
       const final_text = extract_text_from_message(assistant_message?.content);
       return {
         response_text: final_text || "No action was required.",
-        executed_tool_calls: all_executed_tool_calls
+        executed_tool_calls: all_executed_tool_calls,
+        token_usage: build_token_usage()
       };
     }
 
@@ -220,11 +245,13 @@ async function run_openai_tool_routing({
         messages,
         max_tokens: max_output_tokens
       });
+      accumulate_usage(final_response);
 
       const final_text = extract_text_from_message(final_response.choices?.[0]?.message?.content);
       return {
         response_text: final_text || "Tool execution completed.",
-        executed_tool_calls: all_executed_tool_calls
+        executed_tool_calls: all_executed_tool_calls,
+        token_usage: build_token_usage()
       };
     }
   }
@@ -235,11 +262,13 @@ async function run_openai_tool_routing({
     messages,
     max_tokens: max_output_tokens
   });
+  accumulate_usage(fallback_response);
 
   const fallback_text = extract_text_from_message(fallback_response.choices?.[0]?.message?.content);
   return {
     response_text: fallback_text || "Tool execution completed.",
-    executed_tool_calls: all_executed_tool_calls
+    executed_tool_calls: all_executed_tool_calls,
+    token_usage: build_token_usage()
   };
 }
 
