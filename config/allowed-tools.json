@@ -1363,6 +1363,117 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "tool_name": "get_bot_errors",
+      "description": "Review the bot's recent tool errors. Shows error details, counts by tool/type, and unresolved errors. Use this when someone asks about bot errors, failures, or issues.",
+      "domain": "platform-db-edge",
+      "risk_level": "low",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "max_calls_per_request": 2,
+      "requires_confirmation": false,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "hours_back": {
+            "type": "integer",
+            "description": "How many hours back to look (default 24)",
+            "minimum": 1,
+            "maximum": 720
+          },
+          "tool_name": {
+            "type": "string",
+            "description": "Filter errors by specific tool name"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max rows to return (default 20, max 50)",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_bot_sessions",
+      "description": "Review the bot's recent chat sessions. Shows who used the bot, what they asked, which tools were called, duration, and outcome (completed/error/denied). Use this when someone asks about recent bot activity or sessions.",
+      "domain": "platform-db-edge",
+      "risk_level": "low",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "max_calls_per_request": 2,
+      "requires_confirmation": false,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "hours_back": {
+            "type": "integer",
+            "description": "How many hours back to look (default 24)",
+            "minimum": 1,
+            "maximum": 720
+          },
+          "status": {
+            "type": "string",
+            "description": "Filter by session status",
+            "enum": [
+              "completed",
+              "error",
+              "denied",
+              "rate_limited"
+            ]
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Filter by Slack user ID"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max rows to return (default 20, max 50)",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_name": "get_bot_tool_stats",
+      "description": "Get usage statistics for the bot's tools. Shows call counts, success/failure rates, and average duration broken down by tool and by user. Use this when someone asks about bot usage, performance, or which tools are being used.",
+      "domain": "platform-db-edge",
+      "risk_level": "low",
+      "allowed_roles": [
+        "ops",
+        "viewer"
+      ],
+      "max_calls_per_request": 2,
+      "requires_confirmation": false,
+      "redaction_rules": [],
+      "parameters_schema": {
+        "type": "object",
+        "properties": {
+          "hours_back": {
+            "type": "integer",
+            "description": "How many hours back to look (default 24)",
+            "minimum": 1,
+            "maximum": 720
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max tools to return in breakdown (default 30, max 50)",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "additionalProperties": false
+      }
     }
   ]
 }

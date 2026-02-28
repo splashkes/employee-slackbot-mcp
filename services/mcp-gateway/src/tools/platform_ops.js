@@ -234,12 +234,167 @@ async function live_event_diagnostic({ eid }, sql) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Bot self-introspection tools (query esbmcp_ observability tables)
+// ---------------------------------------------------------------------------
+
+async function get_bot_errors({ hours_back, tool_name, limit }, sql) {
+  const lookback = hours_back || 24;
+  const max_rows = Math.min(limit || 20, 50);
+
+  let rows;
+  if (tool_name) {
+    rows = await sql`
+      SELECT te.id, te.tool_name, te.domain, te.error_type,
+             te.error_message, te.error_code, te.error_hint,
+             te.arguments_preview, te.resolved,
+             te.slack_user_id, te.user_role,
+             te.created_at
+      FROM esbmcp_tool_errors te
+      WHERE te.created_at > NOW() - (${lookback} || ' hours')::interval
+        AND te.tool_name = ${tool_name}
+      ORDER BY te.created_at DESC
+      LIMIT ${max_rows}
+    `;
+  } else {
+    rows = await sql`
+      SELECT te.id, te.tool_name, te.domain, te.error_type,
+             te.error_message, te.error_code, te.error_hint,
+             te.arguments_preview, te.resolved,
+             te.slack_user_id, te.user_role,
+             te.created_at
+      FROM esbmcp_tool_errors te
+      WHERE te.created_at > NOW() - (${lookback} || ' hours')::interval
+      ORDER BY te.created_at DESC
+      LIMIT ${max_rows}
+    `;
+  }
+
+  // Also get a summary by tool + error_type
+  const summary = await sql`
+    SELECT tool_name, error_type, COUNT(*) AS cnt
+    FROM esbmcp_tool_errors
+    WHERE created_at > NOW() - (${lookback} || ' hours')::interval
+    GROUP BY tool_name, error_type
+    ORDER BY cnt DESC
+    LIMIT 20
+  `;
+
+  const unresolved = await sql`
+    SELECT COUNT(*) AS cnt
+    FROM esbmcp_tool_errors
+    WHERE resolved = false
+      AND created_at > NOW() - (${lookback} || ' hours')::interval
+  `;
+
+  return {
+    errors: rows,
+    count: rows.length,
+    summary,
+    unresolved_count: Number(unresolved[0]?.cnt || 0),
+    period_hours: lookback
+  };
+}
+
+async function get_bot_sessions({ hours_back, status, user_id, limit }, sql) {
+  const lookback = hours_back || 24;
+  const max_rows = Math.min(limit || 20, 50);
+
+  const conditions = [
+    sql`cs.created_at > NOW() - (${lookback} || ' hours')::interval`
+  ];
+  if (status) conditions.push(sql`cs.status = ${status}`);
+  if (user_id) conditions.push(sql`cs.slack_user_id = ${user_id}`);
+
+  const where = conditions.reduce((a, b) => sql`${a} AND ${b}`);
+
+  const rows = await sql`
+    SELECT cs.id, cs.slack_user_id, cs.slack_username, cs.user_role,
+           cs.interaction_type, cs.status,
+           LEFT(cs.user_prompt, 120) AS prompt_preview,
+           cs.tool_call_count, cs.tools_called,
+           cs.total_duration_ms, cs.error_message, cs.error_id,
+           cs.ai_model, cs.created_at
+    FROM esbmcp_chat_sessions cs
+    WHERE ${where}
+    ORDER BY cs.created_at DESC
+    LIMIT ${max_rows}
+  `;
+
+  // Summary stats
+  const stats = await sql`
+    SELECT status, COUNT(*) AS cnt,
+           AVG(total_duration_ms)::int AS avg_duration_ms,
+           AVG(tool_call_count)::numeric(10,1) AS avg_tools
+    FROM esbmcp_chat_sessions
+    WHERE created_at > NOW() - (${lookback} || ' hours')::interval
+    GROUP BY status
+    ORDER BY cnt DESC
+  `;
+
+  return {
+    sessions: rows,
+    count: rows.length,
+    stats,
+    period_hours: lookback
+  };
+}
+
+async function get_bot_tool_stats({ hours_back, limit }, sql) {
+  const lookback = hours_back || 24;
+  const max_rows = Math.min(limit || 30, 50);
+
+  const by_tool = await sql`
+    SELECT tool_name, domain,
+           COUNT(*) AS total_calls,
+           COUNT(*) FILTER (WHERE ok = true) AS success,
+           COUNT(*) FILTER (WHERE ok = false) AS failures,
+           AVG(duration_ms)::int AS avg_duration_ms,
+           MAX(duration_ms) AS max_duration_ms
+    FROM esbmcp_tool_executions
+    WHERE created_at > NOW() - (${lookback} || ' hours')::interval
+    GROUP BY tool_name, domain
+    ORDER BY total_calls DESC
+    LIMIT ${max_rows}
+  `;
+
+  const by_user = await sql`
+    SELECT slack_user_id, user_role,
+           COUNT(*) AS total_calls,
+           COUNT(DISTINCT tool_name) AS unique_tools
+    FROM esbmcp_tool_executions
+    WHERE created_at > NOW() - (${lookback} || ' hours')::interval
+    GROUP BY slack_user_id, user_role
+    ORDER BY total_calls DESC
+    LIMIT 10
+  `;
+
+  const totals = await sql`
+    SELECT COUNT(*) AS total,
+           COUNT(*) FILTER (WHERE ok = true) AS success,
+           COUNT(*) FILTER (WHERE ok = false) AS failures,
+           AVG(duration_ms)::int AS avg_duration_ms
+    FROM esbmcp_tool_executions
+    WHERE created_at > NOW() - (${lookback} || ' hours')::interval
+  `;
+
+  return {
+    by_tool,
+    by_user,
+    totals: totals[0] || {},
+    period_hours: lookback
+  };
+}
+
 const platform_ops_tools = {
   get_slack_queue_health,
   get_email_queue_stats,
   get_email_log,
   check_rls_policies,
-  live_event_diagnostic
+  live_event_diagnostic,
+  get_bot_errors,
+  get_bot_sessions,
+  get_bot_tool_stats
 };
 
 export { platform_ops_tools };
