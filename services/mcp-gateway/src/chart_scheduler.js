@@ -16,7 +16,7 @@ const logger = new Logger(process.env.LOG_LEVEL || "info");
 
 const POLL_INTERVAL_MS = 60_000;
 
-function create_chart_scheduler({ sql, config, slack_poster }) {
+function create_chart_scheduler({ sql, config, slack_poster, edge }) {
   if (!sql || !slack_poster) {
     logger.warn("chart_scheduler_disabled", {
       reason: !sql ? "no_db" : "no_slack_poster"
@@ -61,13 +61,7 @@ function create_chart_scheduler({ sql, config, slack_poster }) {
     try {
       logger.info("chart_job_processing", job_log_ctx);
 
-      // Fetch fresh EB data
-      const eb = config.eventbrite;
-      if (!eb.private_token && !eb.api_key) {
-        throw new Error("EB_PRIVATE_TOKEN not configured");
-      }
-
-      // Refresh if stale (> 6h), then load attendees
+      // Refresh if cache is stale (> 6h) — uses Edge Function for totals + direct EB API for orders
       const staleness_check = await sql`
         SELECT fetched_at FROM eventbrite_api_cache
         WHERE eventbrite_id = ${job.eventbrite_id}
@@ -76,9 +70,12 @@ function create_chart_scheduler({ sql, config, slack_poster }) {
       if (staleness_check.length === 0 || (Date.now() - new Date(staleness_check[0].fetched_at).getTime()) > 6 * 3600000) {
         const { eventbrite_charts_tools } = await import("./tools/eventbrite_charts.js");
         const refresh_result = await eventbrite_charts_tools.refresh_eventbrite_data(
-          { eid: job.eid, force: true }, sql, null, config
+          { eid: job.eid, force: true }, sql, edge, config
         );
-        if (refresh_result.error) throw new Error(refresh_result.error);
+        if (refresh_result.error) {
+          if (staleness_check.length === 0) throw new Error(refresh_result.error);
+          logger.warn("chart_scheduler_refresh_failed", { ...job_log_ctx, error: refresh_result.error });
+        }
       }
 
       const { attendees, ticket_count, revenue } = await load_event_attendees(sql, job.eventbrite_id);

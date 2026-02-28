@@ -1555,8 +1555,8 @@
     },
     {
       "tool_name": "refresh_eventbrite_data",
-      "description": "Fetch fresh ticket sales data from the Eventbrite API for an event and update the cache. Use when someone asks to refresh or update Eventbrite data, or when cached data is stale. Skips refresh if cache is < 1 hour old (use force=true to override).",
-      "risk_level": "medium",
+      "description": "Refresh ticket sales data for an event by calling the Eventbrite Edge Function and update the local cache. Use when someone asks to refresh or update Eventbrite data, or when cached data is stale. Skips refresh if cache is < 1 hour old (use force=true to override).",
+      "risk_level": "low",
       "domain": "eventbrite-charts",
       "allowed_roles": [
         "ops",
@@ -1669,7 +1669,7 @@
     {
       "tool_name": "generate_chart",
       "description": "Generate a ticket sales pace chart for an event, optionally with comparator events. Refreshes stale data automatically, builds cumulative timeline, renders via QuickChart.io, and returns a chart image URL. Use when someone asks for a ticket chart, sales pace, or ticket visualization.",
-      "risk_level": "medium",
+      "risk_level": "low",
       "domain": "eventbrite-charts",
       "allowed_roles": [
         "ops",

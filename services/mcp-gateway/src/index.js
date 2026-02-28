@@ -539,7 +539,8 @@ async function start_service() {
   const chart_scheduler = create_chart_scheduler({
     sql,
     config: service_config,
-    slack_poster
+    slack_poster,
+    edge
   });
 
   server.listen(service_config.app.port, () => {

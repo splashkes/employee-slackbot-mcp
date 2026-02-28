@@ -338,9 +338,6 @@ function hash_chart_config(config) {
 // ─── Tool Functions ──────────────────────────────────────────────────────────
 
 async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
-  const eb = config.eventbrite;
-  if (!eb.private_token && !eb.api_key) return { error: "EB_PRIVATE_TOKEN not configured" };
-
   // Resolve eventbrite_id from event
   const events = await sql`
     SELECT e.id, e.eid, e.eventbrite_id, e.name,
@@ -374,89 +371,67 @@ async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
     }
   }
 
-  // Fetch from Eventbrite API
-  const eb_event = await eb_fetch(`/events/${event.eventbrite_id}/`, eb, eb.rate_limit_ms);
-  const ticket_classes = await eb_fetch(
-    `/events/${event.eventbrite_id}/ticket_classes/`,
-    eb, eb.rate_limit_ms
-  );
-  const attendees = await eb_fetch_paginated(
-    `/events/${event.eventbrite_id}/attendees/`,
-    eb, eb.rate_limit_ms,
-    "attendees", 20
-  );
-
-  // Compute aggregates
-  const total_tickets_sold = attendees.length;
-  let gross_revenue = 0;
-  let taxes_collected = 0;
-  let eventbrite_fees = 0;
-  let payment_processing_fees = 0;
-  for (const a of attendees) {
-    const costs = a.costs || {};
-    gross_revenue += costs.gross?.major_value ? parseFloat(costs.gross.major_value) : 0;
-    taxes_collected += costs.tax?.major_value ? parseFloat(costs.tax.major_value) : 0;
-    eventbrite_fees += costs.eventbrite_fee?.major_value ? parseFloat(costs.eventbrite_fee.major_value) : 0;
-    payment_processing_fees += costs.payment_fee?.major_value ? parseFloat(costs.payment_fee.major_value) : 0;
+  // Refresh totals via Edge Function (writes to eventbrite_api_cache)
+  if (_edge) {
+    try {
+      await _edge.invoke("fetch-eventbrite-data", {
+        eid,
+        force_refresh: !!force,
+        fetch_reason: "mcp_refresh"
+      });
+    } catch (err) {
+      // Non-fatal — we can still use existing cache
+    }
   }
-  const total_fees = eventbrite_fees + payment_processing_fees;
-  const net_deposit = gross_revenue - total_fees - taxes_collected;
 
-  // Strip attendees to only fields needed for timeline charts (prevents multi-MB blob storage)
-  const slim_attendees = attendees.map((a) => ({
-    created: a.created,
-    costs: { gross: { major_value: a.costs?.gross?.major_value } }
-  }));
+  // Fetch attendee-level data for chart timelines (writes to eventbrite_orders_cache)
+  const eb = config.eventbrite;
+  if (eb.private_token || eb.api_key) {
+    try {
+      const attendees = await eb_fetch_paginated(
+        `/events/${event.eventbrite_id}/attendees/`,
+        eb, eb.rate_limit_ms,
+        "attendees", 20
+      );
+      // Upsert orders into eventbrite_orders_cache for timeline use
+      for (const a of attendees) {
+        const order_id = a.order_id || a.order?.id;
+        if (!order_id) continue;
+        await sql`
+          INSERT INTO eventbrite_orders_cache (
+            event_id, eid, eventbrite_event_id, order_id,
+            order_created, order_status, attendee_count,
+            gross, currency_code, fetched_at, fetched_by
+          ) VALUES (
+            ${event.id}, ${eid}, ${event.eventbrite_id}, ${order_id},
+            ${a.created}, ${a.status || 'placed'}, ${1},
+            ${a.costs?.gross?.major_value ? parseFloat(a.costs.gross.major_value) : 0},
+            ${a.costs?.gross?.currency || 'USD'},
+            NOW(), 'mcp-refresh'
+          ) ON CONFLICT (order_id) DO NOTHING
+        `;
+      }
+    } catch (err) {
+      // Non-fatal — charts will use whatever data exists in cache
+    }
+  }
 
-  // Insert new cache row (table is append-only history, no unique constraint on eventbrite_id)
-  const eb_event_name = eb_event?.name?.text || eb_event?.name || null;
-  const eb_start_date = eb_event?.start?.utc || null;
-  const capacity = (ticket_classes.ticket_classes || []).reduce(
-    (sum, tc) => sum + (tc.quantity_total || 0), 0
-  ) || null;
-
-  await sql`
-    INSERT INTO eventbrite_api_cache (
-      eid, eventbrite_id, event_id,
-      event_data, ticket_classes, sales_summary, orders_summary,
-      total_tickets_sold, gross_revenue, ticket_revenue,
-      taxes_collected, eventbrite_fees, payment_processing_fees,
-      total_fees, net_deposit, total_capacity,
-      currency_code, api_response_status,
-      fetched_at, expires_at, fetched_by, fetch_reason,
-      eventbrite_event_name, eventbrite_start_date
-    ) VALUES (
-      ${eid}, ${event.eventbrite_id}, ${event.id},
-      ${JSON.stringify(eb_event)}, ${JSON.stringify(ticket_classes.ticket_classes || [])},
-      ${JSON.stringify({ orders_count: attendees.length })},
-      ${JSON.stringify({ attendees: slim_attendees })},
-      ${total_tickets_sold},
-      ${Math.round(gross_revenue * 100) / 100},
-      ${Math.round(gross_revenue * 100) / 100},
-      ${Math.round(taxes_collected * 100) / 100},
-      ${Math.round(eventbrite_fees * 100) / 100},
-      ${Math.round(payment_processing_fees * 100) / 100},
-      ${Math.round(total_fees * 100) / 100},
-      ${Math.round(net_deposit * 100) / 100},
-      ${capacity},
-      ${attendees[0]?.costs?.gross?.currency || 'USD'},
-      'success',
-      NOW(), NOW() + INTERVAL '6 hours', 'mcp-gateway', 'refresh_tool',
-      ${eb_event_name}, ${eb_start_date}
-    )
+  // Read back from cache to return summary
+  const latest = await sql`
+    SELECT total_tickets_sold, gross_revenue, net_deposit, total_fees, fetched_at
+    FROM eventbrite_api_cache
+    WHERE eventbrite_id = ${event.eventbrite_id}
+    ORDER BY fetched_at DESC LIMIT 1
   `;
 
   return {
     eid, eventbrite_id: event.eventbrite_id,
     refreshed: true,
-    total_tickets_sold,
-    gross_revenue: Math.round(gross_revenue * 100) / 100,
-    taxes_collected: Math.round(taxes_collected * 100) / 100,
-    total_fees: Math.round(total_fees * 100) / 100,
-    net_deposit: Math.round(net_deposit * 100) / 100,
-    attendee_count: attendees.length,
-    ticket_class_count: (ticket_classes.ticket_classes || []).length,
-    fetched_at: new Date().toISOString()
+    total_tickets_sold: latest[0]?.total_tickets_sold ?? 0,
+    gross_revenue: parseFloat(latest[0]?.gross_revenue) || 0,
+    net_deposit: parseFloat(latest[0]?.net_deposit) || 0,
+    total_fees: parseFloat(latest[0]?.total_fees) || 0,
+    fetched_at: latest[0]?.fetched_at || new Date().toISOString()
   };
 }
 
@@ -736,9 +711,6 @@ async function set_chart_comparators({ eid, comparator_eids }, sql) {
 }
 
 async function generate_chart({ eid, include_comparators, comparator_eids }, sql, _edge, config) {
-  const eb = config.eventbrite;
-  if (!eb.private_token && !eb.api_key) return { error: "EB_PRIVATE_TOKEN not configured" };
-
   // Get target event
   const events = await sql`
     SELECT e.id, e.eid, e.name, e.eventbrite_id,
@@ -752,15 +724,30 @@ async function generate_chart({ eid, include_comparators, comparator_eids }, sql
   const event = events[0];
   if (!event.eventbrite_id) return { error: `No Eventbrite ID linked to ${eid}` };
 
-  // Refresh data if stale (> 6 hours)
+  // Refresh via Edge Function if cache is stale (> 6 hours)
+  let cache_warning = null;
   const staleness_check = await sql`
     SELECT fetched_at FROM eventbrite_api_cache
     WHERE eventbrite_id = ${event.eventbrite_id}
     ORDER BY fetched_at DESC LIMIT 1
   `;
-  if (staleness_check.length === 0 || (Date.now() - new Date(staleness_check[0].fetched_at).getTime()) > 6 * 3600000) {
-    const refresh_result = await refresh_eventbrite_data({ eid, force: true }, sql, _edge, config);
-    if (refresh_result.error) return refresh_result;
+  const cache_age_ms = staleness_check.length > 0
+    ? Date.now() - new Date(staleness_check[0].fetched_at).getTime()
+    : Infinity;
+
+  if (cache_age_ms > 6 * 3600000) {
+    try {
+      const refresh_result = await refresh_eventbrite_data({ eid, force: true }, sql, _edge, config);
+      if (refresh_result.error) {
+        if (staleness_check.length === 0) return refresh_result;
+        cache_warning = `Using stale cache (refresh failed: ${refresh_result.error})`;
+      }
+    } catch (err) {
+      if (staleness_check.length === 0) {
+        return { error: `No cached Eventbrite data for ${eid} and refresh failed: ${err.message}` };
+      }
+      cache_warning = `Using stale cache (refresh failed: ${err.message})`;
+    }
   }
 
   const { attendees, ticket_count, revenue } = await load_event_attendees(sql, event.eventbrite_id);
@@ -876,7 +863,8 @@ async function generate_chart({ eid, include_comparators, comparator_eids }, sql
     pace_per_day,
     days_until_event,
     comparators_used: comparators.map((c) => ({ eid: c.eid, name: c.name, city: c.city })),
-    render_duration_ms
+    render_duration_ms,
+    ...(cache_warning ? { cache_warning } : {})
   };
 }
 
