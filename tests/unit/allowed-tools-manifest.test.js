@@ -36,5 +36,26 @@ test("every tool definition includes required fields", () => {
     assert.equal(typeof tool_definition.requires_confirmation, "boolean");
     assert.equal(typeof tool_definition.max_calls_per_request, "number");
     assert.equal(typeof tool_definition.parameters_schema, "object");
+
+    // passthrough is optional but must be boolean when present
+    if ("passthrough" in tool_definition) {
+      assert.equal(typeof tool_definition.passthrough, "boolean",
+        `${tool_definition.tool_name}: passthrough must be boolean`);
+    }
+  }
+});
+
+test("passthrough tools are all low risk and read-only", () => {
+  const raw_text = fs.readFileSync(manifest_path, "utf8");
+  const payload = JSON.parse(raw_text);
+
+  const passthrough_tools = payload.tools.filter((t) => t.passthrough === true);
+  assert.equal(passthrough_tools.length > 0, true, "should have at least one passthrough tool");
+
+  for (const tool_definition of passthrough_tools) {
+    assert.equal(tool_definition.risk_level, "low",
+      `${tool_definition.tool_name}: passthrough tools must be low risk`);
+    assert.equal(tool_definition.requires_confirmation, false,
+      `${tool_definition.tool_name}: passthrough tools must not require confirmation`);
   }
 });

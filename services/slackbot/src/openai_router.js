@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { hash_json_payload } from "@abcodex/shared/signing.js";
+import { get_tool_definition_by_name } from "./policy.js";
 
 function create_openai_client(api_key) {
   return new OpenAI({ apiKey: api_key });
@@ -100,7 +101,9 @@ async function run_openai_tool_routing({
   tool_executor,
   logger,
   channel_context,
-  set_status
+  set_status,
+  tool_index,
+  user_wants_analysis
 }) {
   // System prompt ordered for prompt caching: static content at the top (cached
   // across all calls), then semi-static domain guidance, then per-channel memory
@@ -179,6 +182,7 @@ async function run_openai_tool_routing({
 
   const openai_tools = build_openai_tools(tool_definitions);
   const all_executed_tool_calls = [];
+  const all_raw_tool_results = [];
   let total_tool_calls = 0;
   const MAX_ROUNDS = 5;
 
@@ -225,7 +229,9 @@ async function run_openai_tool_routing({
       return {
         response_text: final_text || "No action was required.",
         executed_tool_calls: all_executed_tool_calls,
-        token_usage: build_token_usage()
+        token_usage: build_token_usage(),
+        passthrough_mode: null,
+        raw_tool_results: all_raw_tool_results
       };
     }
 
@@ -266,11 +272,15 @@ async function run_openai_tool_routing({
       })
     );
 
-    // Track all executed calls
+    // Track all executed calls and raw results
     for (const item of tool_call_results) {
       all_executed_tool_calls.push({
         tool_name: item.tool_name,
         ...item.argument_summary
+      });
+      all_raw_tool_results.push({
+        tool_name: item.tool_name,
+        result: item.tool_result
       });
     }
 
@@ -289,6 +299,36 @@ async function run_openai_tool_routing({
       });
     }
 
+    // ── Passthrough short-circuit ──────────────────────────────────────────
+    // If the user is NOT asking for analysis and all executed tools so far
+    // are marked passthrough, we can skip GPT's final summarisation call.
+    if (!user_wants_analysis && tool_index) {
+      const all_passthrough = all_raw_tool_results.every((r) => {
+        const def = get_tool_definition_by_name(tool_index, r.tool_name);
+        return def?.passthrough === true;
+      });
+      const no_errors = all_raw_tool_results.every((r) => !r.result?.error);
+
+      if (all_passthrough && no_errors) {
+        if (total_tool_calls === 1) {
+          // Single passthrough tool — return immediately, skip final GPT call
+          return {
+            response_text: "",
+            executed_tool_calls: all_executed_tool_calls,
+            token_usage: build_token_usage(),
+            passthrough_mode: "single",
+            raw_tool_results: all_raw_tool_results
+          };
+        }
+        // Multiple passthrough tools — inject "preserve data verbatim" instruction
+        // and let GPT do a lightweight synthesis, but mark the mode
+        messages.push({
+          role: "system",
+          content: "The tool results above are factual data lookups. Present ALL data exactly as returned — preserve every value, ordering, and count verbatim. Do not summarise, reorder, round, or omit any rows. Use Slack mrkdwn formatting."
+        });
+      }
+    }
+
     // If we've exhausted the tool call budget, do one final call without tools
     if (total_tool_calls >= max_tool_calls) {
       const final_response = await openai_client.chat.completions.create({
@@ -302,7 +342,9 @@ async function run_openai_tool_routing({
       return {
         response_text: final_text || "Tool execution completed.",
         executed_tool_calls: all_executed_tool_calls,
-        token_usage: build_token_usage()
+        token_usage: build_token_usage(),
+        passthrough_mode: null,
+        raw_tool_results: all_raw_tool_results
       };
     }
   }
@@ -319,7 +361,9 @@ async function run_openai_tool_routing({
   return {
     response_text: fallback_text || "Tool execution completed.",
     executed_tool_calls: all_executed_tool_calls,
-    token_usage: build_token_usage()
+    token_usage: build_token_usage(),
+    passthrough_mode: null,
+    raw_tool_results: all_raw_tool_results
   };
 }
 

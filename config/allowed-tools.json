@@ -4,7 +4,7 @@
   "tools": [
     {
       "tool_name": "lookup_event",
-      "description": "Look up an Art Battle event by its EID (e.g. AB4003) or search for events by city name (e.g. Sydney, Toronto). Use city search when no EID is given.",
+      "description": "Look up an Art Battle event by its EID (e.g. AB4003) or search for upcoming events by city name (e.g. Sydney, Toronto). City search returns only future events sorted nearest-first. Present results in the same order they are returned (nearest date first).",
       "risk_level": "low",
       "domain": "data-read",
       "allowed_roles": [
@@ -15,6 +15,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 3,
       "redaction_rules": [
         "mask_phone",
@@ -54,6 +55,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 3,
       "redaction_rules": [
         "mask_phone",
@@ -94,6 +96,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 3,
       "redaction_rules": [
         "mask_phone",
@@ -134,6 +137,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [
         "mask_phone",
@@ -168,6 +172,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [
         "mask_phone",
@@ -228,6 +233,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [],
       "parameters_schema": {
@@ -309,6 +315,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [
         "mask_phone",
@@ -342,6 +349,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [],
       "parameters_schema": {
@@ -369,6 +377,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [],
       "parameters_schema": {
@@ -395,6 +404,7 @@
     },
     {
       "tool_name": "get_eventbrite_data",
+      "passthrough": true,
       "description": "Read locally cached Eventbrite ticket data for an event. WARNING: This reads from a local cache that may be hours or days old — it does NOT call the Eventbrite API. If the user asks to refresh, update, or get the latest data, use refresh_eventbrite_data instead. Use this only when cached/historical data is acceptable.",
       "risk_level": "low",
       "domain": "data-read",
@@ -431,6 +441,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [],
       "parameters_schema": {
@@ -457,6 +468,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [],
       "parameters_schema": {
@@ -777,6 +789,7 @@
     },
     {
       "tool_name": "get_artist_stripe_status",
+      "passthrough": true,
       "description": "Check an artist's Stripe account status \u2014 whether they have a connected account, if charges and payouts are enabled. Use when someone asks about artist payment setup or Stripe onboarding status.",
       "risk_level": "low",
       "domain": "payments",
@@ -858,6 +871,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [],
       "parameters_schema": {
@@ -886,6 +900,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [
         "mask_email"
@@ -907,6 +922,7 @@
     },
     {
       "tool_name": "get_artist_payment_ledger",
+      "passthrough": true,
       "description": "View the full payment ledger for an artist or event — all payments made, amounts, and statuses. Use when someone asks about payment history, what an artist has been paid, or wants a payment audit trail. IMPORTANT: artist_profile_id must be a real UUID from the database — do NOT guess or fabricate UUIDs. If you only have an artist name, call lookup_artist_profile or lookup_person FIRST to find their actual profile UUID, then pass it here. You can also query by eid alone to see all payments for an event.",
       "risk_level": "low",
       "domain": "payments",
@@ -938,6 +954,7 @@
     },
     {
       "tool_name": "get_artists_owed",
+      "passthrough": true,
       "description": "Calculate how much money is owed to artists. Uses the production formula: credits = art sales (status='paid') * event's artist_auction_portion, debits = all non-cancelled payments. Can query by event, by artist_profile_id, or with NO parameters to get ALL unpaid artists globally. For large result sets (>25 artists) returns a summary with top 20 and currency totals. Use when someone asks about an artist's balance, how much they're owed, outstanding payments, who needs to be paid, or all unpaid artists.",
       "risk_level": "low",
       "domain": "payments",
@@ -967,6 +984,7 @@
     },
     {
       "tool_name": "get_payment_status_health",
+      "passthrough": true,
       "description": "Cross-check art sale statuses against payment records to find discrepancies \u2014 sold artwork with no payment, payment status mismatches. Use when someone asks about payment health or wants to audit payment completeness.",
       "risk_level": "low",
       "domain": "payments",
@@ -1002,6 +1020,7 @@
         "viewer"
       ],
       "requires_confirmation": false,
+      "passthrough": true,
       "max_calls_per_request": 2,
       "redaction_rules": [
         "mask_email"

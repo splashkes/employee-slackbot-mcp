@@ -22,6 +22,7 @@ import { create_session_writer } from "./session_writer.js";
 import { markdown_to_slack_mrkdwn } from "./slack_format.js";
 import { create_assistant } from "./assistant.js";
 import { build_home_blocks } from "./home_tab.js";
+import { format_passthrough_result } from "./passthrough_format.js";
 
 const logger = new Logger(service_config.app.log_level);
 const role_cache_map = new Map();
@@ -61,6 +62,9 @@ function build_safe_error_message(error_id, error_code) {
 function remove_bot_mentions(raw_text) {
   return String(raw_text || "").replace(/<@[^>]+>/g, "").trim();
 }
+
+// Intent-override: analysis words force GPT review even on passthrough tools
+const ANALYSIS_PATTERN = /\b(analy[sz]e|evaluat|compar|explain|interpret|assess|why\s)/i;
 
 // Channels where any user gets read-only (viewer) access without being whitelisted
 const OPEN_VIEWER_CHANNELS = new Set(
@@ -420,6 +424,7 @@ async function handle_prompt({
   const tool_call_counts = new Map();
   const tool_call_details = [];
   const is_confirmed = is_confirmation_satisfied(normalized_prompt);
+  const user_wants_analysis = ANALYSIS_PATTERN.test(normalized_prompt);
 
   const routing_result = await run_openai_tool_routing({
     openai_client,
@@ -431,6 +436,8 @@ async function handle_prompt({
     logger,
     channel_context,
     set_status,
+    tool_index,
+    user_wants_analysis,
     tool_executor: async ({ tool_name, arguments_payload }) => {
       const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
 
@@ -514,16 +521,24 @@ async function handle_prompt({
     identity_context,
     role_name,
     latency_ms,
-    tools_executed: routing_result.executed_tool_calls.map((item) => item.tool_name)
+    tools_executed: routing_result.executed_tool_calls.map((item) => item.tool_name),
+    passthrough_mode: routing_result.passthrough_mode || null
   });
+
+  // Passthrough: format raw tool output when GPT was bypassed
+  let response_text = routing_result.response_text;
+  if (routing_result.passthrough_mode === "single" && routing_result.raw_tool_results?.length > 0) {
+    const { tool_name, result } = routing_result.raw_tool_results[0];
+    response_text = format_passthrough_result(tool_name, result);
+  }
 
   // Skip PII redaction for ops role — they need full contact details
   const response_redaction_rules = role_name === "ops"
     ? []
     : get_response_redaction_rules(tool_index, routing_result.executed_tool_calls);
   const redacted_text = role_name === "ops"
-    ? routing_result.response_text
-    : redact_text(routing_result.response_text, response_redaction_rules);
+    ? response_text
+    : redact_text(response_text, response_redaction_rules);
   const final_response = truncate_text(redacted_text, service_config.limits.response_max_chars);
 
   // Write full session to Postgres
@@ -542,7 +557,8 @@ async function handle_prompt({
     completion_tokens: token_usage.completion_tokens || 0,
     total_tokens: token_usage.total_tokens || 0,
     api_rounds: token_usage.api_rounds || 0,
-    redaction_rules_applied: response_redaction_rules
+    redaction_rules_applied: response_redaction_rules,
+    passthrough_mode: routing_result.passthrough_mode || null
   });
 
   session_writer.write_audit_event({
