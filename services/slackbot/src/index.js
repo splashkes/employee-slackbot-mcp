@@ -488,7 +488,9 @@ async function handle_prompt({
   const response_redaction_rules = role_name === "ops"
     ? []
     : get_response_redaction_rules(tool_index, routing_result.executed_tool_calls);
-  const redacted_text = redact_text(routing_result.response_text, response_redaction_rules);
+  const redacted_text = role_name === "ops"
+    ? routing_result.response_text
+    : redact_text(routing_result.response_text, response_redaction_rules);
   const final_response = truncate_text(redacted_text, service_config.limits.response_max_chars);
 
   // Write full session to Postgres
@@ -1038,6 +1040,9 @@ async function start_service() {
     if (event.subtype) return;
     // Ignore if no user (system messages)
     if (!event.user) return;
+    // In group DMs (mpim), skip messages that @mention the bot — app_mention handles those.
+    // Without this, both handlers fire and the user gets duplicate (often conflicting) responses.
+    if (event.channel_type === "mpim" && /<@[^>]+>/.test(event.text || "")) return;
 
     // In DMs, reply inline (no threading) unless user is already in a thread.
     // Only set thread_ts when event.thread_ts exists (user sent a threaded reply).
