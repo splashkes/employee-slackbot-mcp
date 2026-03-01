@@ -424,7 +424,14 @@ async function handle_prompt({
   const tool_call_counts = new Map();
   const tool_call_details = [];
   const is_confirmed = is_confirmation_satisfied(normalized_prompt);
-  const user_wants_analysis = ANALYSIS_PATTERN.test(normalized_prompt);
+  // Extract only the current question for intent detection — conversation
+  // context prepended by fetch_thread_context / fetch_dm_context may contain
+  // analysis words from prior messages that would falsely trigger the override.
+  const current_question_marker = normalized_prompt.lastIndexOf("[Current question]");
+  const current_question_text = current_question_marker >= 0
+    ? normalized_prompt.slice(current_question_marker)
+    : normalized_prompt;
+  const user_wants_analysis = ANALYSIS_PATTERN.test(current_question_text);
 
   const routing_result = await run_openai_tool_routing({
     openai_client,
