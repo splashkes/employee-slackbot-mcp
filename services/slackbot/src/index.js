@@ -791,11 +791,17 @@ async function handle_and_reply({ prompt_text, identity_context, reply_fn, event
 
     const formatted = markdown_to_slack_mrkdwn(response_text);
 
-    // Always reply as a thread on the user's message (or inside existing thread)
+    // Reply as thread when thread_ts is set, inline otherwise.
+    // DM handler only sets thread_ts when user is already in a thread.
     if (thread_ts && slack_client && channel_id) {
       await slack_client.chat.postMessage({
         channel: channel_id,
         thread_ts,
+        text: formatted
+      });
+    } else if (slack_client && channel_id) {
+      await slack_client.chat.postMessage({
+        channel: channel_id,
         text: formatted
       });
     } else if (!slack_client || !channel_id) {
@@ -1006,8 +1012,10 @@ async function start_service() {
     // Ignore if no user (system messages)
     if (!event.user) return;
 
-    const thread_ts = event.thread_ts || event.ts;
-    const typing = create_typing_indicator(client, event.channel, thread_ts);
+    // In DMs, reply inline (no threading) unless user is already in a thread.
+    // Only set thread_ts when event.thread_ts exists (user sent a threaded reply).
+    const thread_ts = event.thread_ts || null;
+    const typing = create_typing_indicator(client, event.channel, thread_ts || event.ts);
     const confirm = create_confirmation_handler(client, event.channel);
 
     const prompt_text = await fetch_thread_context(
