@@ -1129,11 +1129,13 @@ async function start_service() {
     if (event.item?.type !== "message") return;
 
     const reaction = event.reaction;
+    // Strip skin-tone modifiers (e.g. "pray::skin-tone-3" → "pray")
+    const base_reaction = reaction.replace(/::skin-tone-\d+$/, "");
     let sentiment;
 
-    if (POSITIVE_REACTIONS.has(reaction)) sentiment = "positive";
-    else if (NEGATIVE_REACTIONS.has(reaction)) sentiment = "negative";
-    else if (BUG_REACTIONS.has(reaction)) sentiment = "bug";
+    if (POSITIVE_REACTIONS.has(base_reaction)) sentiment = "positive";
+    else if (NEGATIVE_REACTIONS.has(base_reaction)) sentiment = "negative";
+    else if (BUG_REACTIONS.has(base_reaction)) sentiment = "bug";
     else sentiment = "neutral";
 
     session_writer.write_reaction_feedback({
