@@ -484,10 +484,10 @@ async function handle_prompt({
     tools_executed: routing_result.executed_tool_calls.map((item) => item.tool_name)
   });
 
-  const response_redaction_rules = get_response_redaction_rules(
-    tool_index,
-    routing_result.executed_tool_calls
-  );
+  // Skip PII redaction for ops role — they need full contact details
+  const response_redaction_rules = role_name === "ops"
+    ? []
+    : get_response_redaction_rules(tool_index, routing_result.executed_tool_calls);
   const redacted_text = redact_text(routing_result.response_text, response_redaction_rules);
   const final_response = truncate_text(redacted_text, service_config.limits.response_max_chars);
 
