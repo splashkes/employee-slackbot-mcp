@@ -1,6 +1,6 @@
 # Orchestration + Execution Runbook
 
-Last Updated: 2026-02-28
+Last Updated: 2026-03-01
 Owner: Platform Engineering
 
 ## 1. Services
@@ -312,14 +312,36 @@ If `missing_scope`, add `channels:history` in the Slack app's OAuth & Permission
 
 Required bot token scopes (set at api.slack.com/apps):
 
-| Scope | Purpose |
-|-------|---------|
-| `app_mentions:read` | Listen for @mentions |
-| `chat:write` | Send messages and thread replies |
-| `commands` | Register /ab slash command |
-| `channels:history` | Read thread context for follow-up questions |
-| `reactions:read` | Read reactions (future) |
-| `reactions:write` | Add hourglass typing indicator |
+| Scope | Status | Purpose |
+|-------|--------|---------|
+| `app_mentions:read` | Active | Listen for @mentions in channels |
+| `chat:write` | Active | Send messages and thread replies |
+| `commands` | Active | Register /ab slash command |
+| `channels:history` | Active | Read thread context for follow-up questions |
+| `reactions:write` | Active | Add hourglass typing indicator |
+| `im:history` | Active | Read DM thread context |
+| `im:read` | Active | View DM channel metadata |
+| `im:write` | Active | Send DM messages |
+| `mpim:history` | Active | Read group DM thread context |
+| `mpim:read` | Active | View group DM metadata |
+| `mpim:write` | Active | Send group DM messages |
+| `assistant:write` | Active | Slack Assistant framework (top-bar icon, split pane, suggested prompts) |
+| `reactions:read` | Active | Read emoji reactions for quality feedback |
+
+See [docs/slack-app-setup.md](slack-app-setup.md) for full setup guide including event subscriptions and App Home config.
+
+### 9.1 Interaction Modes
+
+| Mode | Trigger | Handler | Interaction Type |
+|------|---------|---------|-----------------|
+| Channel @mention | `@Arthur Bot ...` in a channel | `app_mention` event | `app_mention` |
+| Slash command | `/ab ...` | `command` handler | `slash_command` |
+| Direct message | Message in DM with bot | `message` event (`channel_type: im`) | `direct_message` |
+| Group DM | Message in group DM with bot | `message` event (`channel_type: mpim`) | `group_dm` |
+| Assistant panel | Click bot icon in Slack top bar | `Assistant` framework | `assistant` |
+| Reaction feedback | React with emoji on bot message | `reaction_added` event | passive |
+
+All modes except reaction feedback go through the same `handle_prompt` → `run_openai_tool_routing` pipeline with full RBAC, rate limiting, and session logging.
 
 ## 10. Emergency Read-Only Mode
 
@@ -361,6 +383,29 @@ GROUP BY ai_model;
 SELECT * FROM esbmcp_bug_reports
 WHERE status IN ('open', 'in_progress')
 ORDER BY created_at DESC;
+```
+
+### Reaction feedback (Tier 3)
+```sql
+-- Sentiment breakdown (last 7 days)
+SELECT sentiment, COUNT(*) AS count
+FROM esbmcp_reaction_feedback
+WHERE created_at > NOW() - INTERVAL '7 days'
+GROUP BY sentiment ORDER BY count DESC;
+
+-- Recent negative/bug reactions
+SELECT slack_channel_id, message_ts, slack_user_id, reaction, sentiment, created_at
+FROM esbmcp_reaction_feedback
+WHERE sentiment IN ('negative', 'bug')
+ORDER BY created_at DESC LIMIT 10;
+```
+
+### Interaction mode breakdown
+```sql
+SELECT interaction_type, COUNT(*) AS sessions
+FROM esbmcp_chat_sessions
+WHERE created_at > NOW() - INTERVAL '7 days'
+GROUP BY interaction_type ORDER BY sessions DESC;
 ```
 
 ### Data retention cleanup (run weekly)
