@@ -271,14 +271,19 @@ async function get_artists_owed({ eid, artist_profile_id }, sql) {
 
   // For large result sets, return a summary to avoid overwhelming the AI context
   if (results.length > 25) {
-    // Group totals by currency using per-currency credits (not the merged balance)
+    // Group totals by currency using per-artist balance (credits - debits)
     const by_currency = {};
     for (const r of results) {
       for (const cb of r.currency_breakdown) {
         const cur = cb.currency || "UNKNOWN";
-        if (!by_currency[cur]) by_currency[cur] = { currency: cur, total_credits: 0, artist_count: 0 };
-        by_currency[cur].total_credits += cb.credits;
+        if (!by_currency[cur]) by_currency[cur] = { currency: cur, total_owed: 0, artist_count: 0 };
+        by_currency[cur].total_owed += cb.credits;
         by_currency[cur].artist_count++;
+      }
+      // Subtract this artist's debits proportionally from their primary currency
+      if (r.currency_breakdown.length > 0 && r.total_debits > 0) {
+        const primary_cur = r.currency_breakdown[0].currency || "UNKNOWN";
+        if (by_currency[primary_cur]) by_currency[primary_cur].total_owed -= r.total_debits;
       }
     }
 
@@ -288,7 +293,7 @@ async function get_artists_owed({ eid, artist_profile_id }, sql) {
       currency_summary: Object.values(by_currency).map((c) => ({
         currency: c.currency,
         artist_count: c.artist_count,
-        total_credits: Math.round(c.total_credits * 100) / 100
+        total_owed: Math.round(Math.max(0, c.total_owed) * 100) / 100
       })),
       top_20: results.slice(0, 20).map((r) => ({
         artist_name: r.artist_name,

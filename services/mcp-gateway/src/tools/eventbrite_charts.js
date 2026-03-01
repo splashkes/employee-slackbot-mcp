@@ -658,6 +658,10 @@ async function get_chart_comparators({ eid, force_rescore }, sql, _edge, config)
           ${s.city_score}, ${s.scale_similarity}, ${s.price_similarity},
           ${s.recency_score}, ${s.weekday_similarity}, ${s.total_score}, ${s.pool}
         )
+        ON CONFLICT (target_eid, candidate_eid) DO UPDATE SET
+          candidate_name = EXCLUDED.candidate_name,
+          total_score = EXCLUDED.total_score,
+          pool = EXCLUDED.pool
       `;
     }
   }

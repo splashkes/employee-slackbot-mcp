@@ -96,6 +96,33 @@ async function fetch_thread_context(client, channel, thread_ts, current_ts, curr
   return current_text;
 }
 
+// Fetch recent DM conversation history (non-threaded) — last 10 messages within 6 hours
+async function fetch_dm_context(client, channel, current_ts, current_text) {
+  try {
+    const six_hours_ago = String(Date.now() / 1000 - 6 * 60 * 60);
+    const history = await client.conversations.history({
+      channel,
+      limit: 11,
+      oldest: six_hours_ago
+    });
+    const prior_messages = (history.messages || [])
+      .filter((m) => m.ts !== current_ts && !m.thread_ts)
+      .slice(0, 10)
+      .reverse()
+      .map((m) => {
+        const author = m.bot_id ? "Arthur Bot" : (m.user ? `<@${m.user}>` : "Unknown");
+        return `${author}: ${m.text}`;
+      })
+      .join("\n");
+    if (prior_messages) {
+      return `[Recent conversation context — last messages in this DM (within 6 hours)]\n${prior_messages}\n\n[Current question]\n${current_text}`;
+    }
+  } catch (err) {
+    logger.warn("dm_context_fetch_failed", { channel, error_message: err?.message });
+  }
+  return current_text;
+}
+
 async function resolve_role_for_user(user_id, channel_id) {
   if (service_config.rbac.mode === "static") {
     const explicit_role = service_config.rbac.user_role_map[user_id];
@@ -1018,9 +1045,10 @@ async function start_service() {
     const typing = create_typing_indicator(client, event.channel, thread_ts || event.ts);
     const confirm = create_confirmation_handler(client, event.channel);
 
-    const prompt_text = await fetch_thread_context(
-      client, event.channel, event.thread_ts, event.ts, event.text
-    );
+    // In threads, fetch thread context; otherwise fetch recent DM history (last 10 msgs, 6h window)
+    const prompt_text = thread_ts
+      ? await fetch_thread_context(client, event.channel, event.thread_ts, event.ts, event.text)
+      : await fetch_dm_context(client, event.channel, event.ts, event.text);
 
     const interaction_type = event.channel_type === "mpim" ? "group_dm" : "direct_message";
 

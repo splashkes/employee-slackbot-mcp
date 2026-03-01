@@ -395,7 +395,7 @@
     },
     {
       "tool_name": "get_eventbrite_data",
-      "description": "Get cached Eventbrite ticket data for an event. Use when someone asks about Eventbrite ticket sales, attendee counts, or event registration data.",
+      "description": "Read locally cached Eventbrite ticket data for an event. WARNING: This reads from a local cache that may be hours or days old — it does NOT call the Eventbrite API. If the user asks to refresh, update, or get the latest data, use refresh_eventbrite_data instead. Use this only when cached/historical data is acceptable.",
       "risk_level": "low",
       "domain": "data-read",
       "allowed_roles": [
@@ -1555,7 +1555,7 @@
     },
     {
       "tool_name": "refresh_eventbrite_data",
-      "description": "Refresh ticket sales data for an event by calling the Eventbrite Edge Function and update the local cache. Use when someone asks to refresh or update Eventbrite data, or when cached data is stale. Skips refresh if cache is < 1 hour old (use force=true to override).",
+      "description": "Call the Eventbrite API to fetch the latest live ticket sales data and update the local cache. ALWAYS use this instead of get_eventbrite_data when the user wants current/fresh/latest/up-to-date numbers, or when they say 'refresh', 'update', or 'check now'. Skips refresh if cache is < 1 hour old (use force=true to override).",
       "risk_level": "low",
       "domain": "eventbrite-charts",
       "allowed_roles": [

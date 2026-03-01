@@ -187,7 +187,7 @@ async function get_artist_invitations({ eid, artist_profile_id }, sql) {
     return { error: "Provide eid or artist_profile_id" };
   }
 
-  const confirmed = rows.filter((r) => r.status === "confirmed");
+  const confirmed = rows.filter((r) => r.status === "accepted" || r.status === "confirmed");
   const pending = rows.filter((r) => r.status === "pending" || r.status === "invited");
 
   return { invitations: rows, count: rows.length, confirmed: confirmed.length, pending: pending.length };
@@ -331,11 +331,11 @@ async function get_qr_scan_status({ eid, person_id }, sql) {
     if (event.length === 0) return { error: `No event found for eid=${eid}` };
 
     rows = await sql`
-      SELECT qr.id, qr.code,
+      SELECT qr.id, COALESCE(qr.code, pqs.qr_code) AS code,
              pqs.scan_timestamp, pqs.person_id,
              p.first_name, p.last_name, p.email
       FROM people_qr_scans pqs
-      JOIN qr_codes qr ON qr.code = pqs.qr_code
+      LEFT JOIN qr_codes qr ON qr.code = pqs.qr_code
       JOIN people p ON p.id = pqs.person_id
       WHERE pqs.event_id = ${event[0].id}
       ORDER BY pqs.scan_timestamp DESC
