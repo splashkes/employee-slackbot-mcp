@@ -81,9 +81,27 @@ async function is_group_dm_channel(client, channel_id) {
 }
 
 // Reaction sentiment classification for Tier 3 feedback
-const POSITIVE_REACTIONS = new Set(["thumbsup", "+1", "white_check_mark", "100", "tada", "heart", "star"]);
-const NEGATIVE_REACTIONS = new Set(["thumbsdown", "-1", "x", "confused", "disappointed", "face_with_rolling_eyes"]);
-const BUG_REACTIONS = new Set(["bug"]);
+const POSITIVE_REACTIONS = new Set([
+  "thumbsup", "+1", "white_check_mark", "100", "tada", "heart", "star",
+  "clap", "raised_hands", "muscle", "fire", "rocket", "trophy", "medal",
+  "ok_hand", "pray", "sparkles", "star2", "star-struck", "heart_eyes",
+  "smiling_face_with_3_hearts", "partying_face", "sunglasses", "chef-kiss",
+  "chefs_kiss", "the_horns", "heavy_check_mark", "ballot_box_with_check",
+  "smile", "grinning", "blush", "wink", "yum", "zap", "boom", "gem",
+  "crown", "1st_place_medal", "2nd_place_medal", "3rd_place_medal",
+  "rainbow", "champagne", "beers", "raised_hand_with_fingers_splayed"
+]);
+const NEGATIVE_REACTIONS = new Set([
+  "thumbsdown", "-1", "x", "confused", "disappointed", "face_with_rolling_eyes",
+  "angry", "rage", "cry", "sob", "weary", "tired_face", "pensive",
+  "worried", "frowning", "grimacing", "unamused", "expressionless",
+  "no_entry", "no_entry_sign", "skull", "facepalm", "man-facepalming",
+  "woman-facepalming", "person_facepalming", "hankey", "poop",
+  "see_no_evil", "face_with_monocle", "thinking_face", "nauseated_face",
+  "broken_heart", "warning", "bangbang", "heavy_multiplication_x"
+]);
+const BUG_REACTIONS = new Set(["bug", "beetle", "ant", "spider", "wrench", "hammer_and_wrench"]);
+const CONFUSED_RESPONSES = ["thinking_face", "face_with_monocle", "upside_down_face", "question", "grey_question", "interrobang"];
 
 // Shared thread context fetcher — used by app_mention and DM handlers
 async function fetch_thread_context(client, channel, thread_ts, current_ts, current_text) {
@@ -1107,16 +1125,16 @@ async function start_service() {
   // Maps emoji reactions on bot messages to sentiment and logs to DB.
   // Requires subscribing to reaction_added event in Slack app settings.
   // -------------------------------------------------------------------------
-  app.event("reaction_added", async ({ event }) => {
+  app.event("reaction_added", async ({ event, client }) => {
     if (event.item?.type !== "message") return;
 
     const reaction = event.reaction;
-    let sentiment = null;
+    let sentiment;
 
     if (POSITIVE_REACTIONS.has(reaction)) sentiment = "positive";
     else if (NEGATIVE_REACTIONS.has(reaction)) sentiment = "negative";
     else if (BUG_REACTIONS.has(reaction)) sentiment = "bug";
-    else return;
+    else sentiment = "neutral";
 
     session_writer.write_reaction_feedback({
       slack_channel_id: event.item.channel,
@@ -1126,6 +1144,17 @@ async function start_service() {
       reaction,
       sentiment
     });
+
+    // React back to acknowledge — pick a matching response emoji
+    const response_emoji = sentiment === "positive" ? "raised_hands"
+      : sentiment === "negative" ? "eyes"
+      : sentiment === "bug" ? "memo"
+      : CONFUSED_RESPONSES[Math.floor(Math.random() * CONFUSED_RESPONSES.length)];
+    client.reactions.add({
+      channel: event.item.channel,
+      timestamp: event.item.ts,
+      name: response_emoji
+    }).catch(() => {});
 
     logger.info("reaction_feedback_captured", {
       reaction,
