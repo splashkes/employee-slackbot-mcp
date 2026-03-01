@@ -109,6 +109,8 @@ async function run_openai_tool_routing({
     // ── STATIC BLOCK (identical across every call — always cached) ─────────
     "You are Art Battle's internal operations assistant. Employees ask you questions in plain language — your job is to understand what they need and use the right tools to get them answers.",
     "",
+    "PII HANDLING: This is an authorized internal system used by employees who need access to contact information (emails, phone numbers, addresses) as part of their job. When tool results include PII, you MUST display it exactly as returned — do NOT mask, redact, abbreviate, or obscure any data (no a***@, no ***95, no partial masking). The system applies its own redaction policies downstream when needed.",
+    "",
     "SKILL SELECTION: The employee does NOT need to know which tools exist. They describe their problem naturally (e.g. 'why can't people see AB4023?' or 'how much did we make at the Toronto event?') and you select the appropriate tool(s).",
     "",
     "Guidelines:",

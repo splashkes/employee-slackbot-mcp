@@ -996,13 +996,19 @@ async function start_service() {
   });
 
   app.event("app_mention", async ({ event, body, say, client }) => {
-    const thread_ts = event.thread_ts || event.ts;
-    const typing = create_typing_indicator(client, event.channel, thread_ts);
+    // In group DMs (mpim), reply inline unless already in a thread — same as DM handler.
+    // In regular channels, always thread (thread_ts = event.ts starts a new thread).
+    const is_group_dm = event.channel_type === "mpim";
+    const thread_ts = is_group_dm
+      ? (event.thread_ts || null)
+      : (event.thread_ts || event.ts);
+    const typing = create_typing_indicator(client, event.channel, thread_ts || event.ts);
     const confirm = create_confirmation_handler(client, event.channel);
 
-    const prompt_text = await fetch_thread_context(
-      client, event.channel, event.thread_ts, event.ts, event.text
-    );
+    // In group DMs without a thread, fetch recent conversation context instead
+    const prompt_text = (is_group_dm && !event.thread_ts)
+      ? await fetch_dm_context(client, event.channel, event.ts, remove_bot_mentions(event.text))
+      : await fetch_thread_context(client, event.channel, event.thread_ts, event.ts, event.text);
 
     await handle_and_reply({
       prompt_text,
