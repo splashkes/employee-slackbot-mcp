@@ -63,6 +63,17 @@ function extract_text_from_message(message_content) {
 
 const SAFE_LOG_KEYS = ["eid", "round", "group_by", "search_by", "status", "hours_back", "audience_filter", "table_name", "limit", "title", "description", "priority", "related_eid", "city", "force", "cadence", "action", "include_comparators", "slack_channel_id", "force_rescore"];
 
+// Tool-specific loading labels for the Slack Assistant status indicator
+const TOOL_STATUS_LABELS = {
+  lookup_event: "Looking up event...",
+  get_auction_revenue: "Checking revenue...",
+  generate_chart: "Generating chart...",
+  search_slack_knowledge: "Searching Slack archive...",
+  get_payment_balance: "Checking payment balance...",
+  refresh_eventbrite_data: "Refreshing Eventbrite data...",
+  get_eventbrite_data: "Loading Eventbrite data..."
+};
+
 function summarize_arguments_payload(arguments_payload) {
   const normalized_payload =
     arguments_payload && typeof arguments_payload === "object" ? arguments_payload : {};
@@ -88,7 +99,8 @@ async function run_openai_tool_routing({
   max_output_tokens,
   tool_executor,
   logger,
-  channel_context
+  channel_context,
+  set_status
 }) {
   // System prompt ordered for prompt caching: static content at the top (cached
   // across all calls), then semi-static domain guidance, then per-channel memory
@@ -232,6 +244,11 @@ async function run_openai_tool_routing({
           round,
           ...argument_summary
         });
+
+        // Update assistant loading state (fire-and-forget — cosmetic only)
+        if (set_status) {
+          set_status(TOOL_STATUS_LABELS[tool_name] || "Working...").catch(() => {});
+        }
 
         const tool_result = await tool_executor({
           tool_name,

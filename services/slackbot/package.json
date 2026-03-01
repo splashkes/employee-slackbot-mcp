@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "check": "node --check src/index.js && node --check src/config.js && node --check src/policy.js && node --check src/openai_router.js && node --check src/mcp_client.js && node --check src/logger.js && node --check src/session_writer.js"
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/policy.js && node --check src/openai_router.js && node --check src/mcp_client.js && node --check src/logger.js && node --check src/session_writer.js && node --check src/assistant.js"
   },
   "dependencies": {
     "@abcodex/shared": "*",

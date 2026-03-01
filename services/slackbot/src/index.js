@@ -20,6 +20,7 @@ import {
 import { AUDIT_EVENTS, MCP_ERROR_CODES, RISK_LEVELS } from "@abcodex/shared/constants.js";
 import { create_session_writer } from "./session_writer.js";
 import { markdown_to_slack_mrkdwn } from "./slack_format.js";
+import { create_assistant } from "./assistant.js";
 
 const logger = new Logger(service_config.app.log_level);
 const role_cache_map = new Map();
@@ -64,6 +65,36 @@ function remove_bot_mentions(raw_text) {
 const OPEN_VIEWER_CHANNELS = new Set(
   (process.env.OPEN_VIEWER_CHANNELS || "C0AHV5ZCJG4").split(",").map((s) => s.trim()).filter(Boolean)
 );
+
+// Reaction sentiment classification for Tier 3 feedback
+const POSITIVE_REACTIONS = new Set(["thumbsup", "+1", "white_check_mark", "100", "tada", "heart", "star"]);
+const NEGATIVE_REACTIONS = new Set(["thumbsdown", "-1", "x", "confused", "disappointed", "face_with_rolling_eyes"]);
+const BUG_REACTIONS = new Set(["bug"]);
+
+// Shared thread context fetcher — used by app_mention and DM handlers
+async function fetch_thread_context(client, channel, thread_ts, current_ts, current_text) {
+  if (!thread_ts) return current_text;
+  try {
+    const thread = await client.conversations.replies({
+      channel,
+      ts: thread_ts,
+      limit: 20
+    });
+    const prior_messages = (thread.messages || [])
+      .filter((m) => m.ts !== current_ts)
+      .map((m) => {
+        const author = m.bot_id ? "Arthur Bot" : (m.user ? `<@${m.user}>` : "Unknown");
+        return `${author}: ${m.text}`;
+      })
+      .join("\n");
+    if (prior_messages) {
+      return `[Thread context — previous messages in this thread]\n${prior_messages}\n\n[Current question]\n${current_text}`;
+    }
+  } catch (err) {
+    logger.warn("thread_context_fetch_failed", { channel, error_message: err?.message });
+  }
+  return current_text;
+}
 
 async function resolve_role_for_user(user_id, channel_id) {
   if (service_config.rbac.mode === "static") {
@@ -186,7 +217,8 @@ async function handle_prompt({
   mcp_client,
   session_writer,
   interaction_type,
-  confirm_fn
+  confirm_fn,
+  set_status
 }) {
   const session_id = session_writer.create_session_id();
   const session_start_ms = Date.now();
@@ -338,6 +370,7 @@ async function handle_prompt({
     max_output_tokens: service_config.openai.max_output_tokens,
     logger,
     channel_context,
+    set_status,
     tool_executor: async ({ tool_name, arguments_payload }) => {
       const tool_definition = get_tool_definition_by_name(tool_index, tool_name);
 
@@ -879,6 +912,30 @@ async function start_service() {
 
   register_confirmation_actions(app);
 
+  // -------------------------------------------------------------------------
+  // Tier 2: Slack Assistant framework (assistant:write scope)
+  // Provides top-bar icon, split-pane UI, suggested prompts, loading states.
+  // Requires: Enable "Agents & AI Apps" in Slack app settings.
+  // -------------------------------------------------------------------------
+  const assistant = create_assistant({
+    handle_prompt_fn: async ({ prompt_text, identity_context, interaction_type, set_status }) => {
+      const response_text = await handle_prompt({
+        prompt_text,
+        identity_context,
+        allowed_tools_manifest,
+        tool_index,
+        openai_client,
+        mcp_client,
+        session_writer,
+        interaction_type,
+        set_status
+      });
+      return markdown_to_slack_mrkdwn(response_text);
+    },
+    logger
+  });
+  app.assistant(assistant);
+
   app.command(service_config.slack.command_prefix, async ({ command, ack, respond, client }) => {
     await ack();
 
@@ -908,29 +965,9 @@ async function start_service() {
     const typing = create_typing_indicator(client, event.channel, thread_ts);
     const confirm = create_confirmation_handler(client, event.channel);
 
-    // If this mention is inside a thread, fetch prior messages for context
-    let prompt_text = event.text;
-    if (event.thread_ts) {
-      try {
-        const thread = await client.conversations.replies({
-          channel: event.channel,
-          ts: event.thread_ts,
-          limit: 20
-        });
-        const prior_messages = (thread.messages || [])
-          .filter((m) => m.ts !== event.ts) // exclude the current message
-          .map((m) => {
-            const author = m.bot_id ? "Arthur Bot" : (m.user ? `<@${m.user}>` : "Unknown");
-            return `${author}: ${m.text}`;
-          })
-          .join("\n");
-        if (prior_messages) {
-          prompt_text = `[Thread context — previous messages in this thread]\n${prior_messages}\n\n[Current question]\n${event.text}`;
-        }
-      } catch (thread_err) {
-        logger.warn("thread_context_fetch_failed", { error_message: thread_err?.message });
-      }
-    }
+    const prompt_text = await fetch_thread_context(
+      client, event.channel, event.thread_ts, event.ts, event.text
+    );
 
     await handle_and_reply({
       prompt_text,
@@ -953,6 +990,86 @@ async function start_service() {
       slack_client: client,
       channel_id: event.channel,
       thread_ts
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Tier 1: DM and group DM support (im:history, im:read, mpim:history, mpim:read)
+  // Handles direct messages and multi-person DMs without requiring @mention.
+  // Requires subscribing to message.im and message.mpim events in Slack app settings.
+  // -------------------------------------------------------------------------
+  app.event("message", async ({ event, body, say, client }) => {
+    // Only handle DMs and group DMs — channel messages are handled by app_mention
+    if (event.channel_type !== "im" && event.channel_type !== "mpim") return;
+    // Ignore bot's own messages, message_changed, message_deleted, etc.
+    if (event.subtype) return;
+    // Ignore if no user (system messages)
+    if (!event.user) return;
+
+    const thread_ts = event.thread_ts || event.ts;
+    const typing = create_typing_indicator(client, event.channel, thread_ts);
+    const confirm = create_confirmation_handler(client, event.channel);
+
+    const prompt_text = await fetch_thread_context(
+      client, event.channel, event.thread_ts, event.ts, event.text
+    );
+
+    const interaction_type = event.channel_type === "mpim" ? "group_dm" : "direct_message";
+
+    await handle_and_reply({
+      prompt_text,
+      identity_context: {
+        team_id: body?.team_id || event.team,
+        channel_id: event.channel,
+        user_id: event.user,
+        username: event.username || null
+      },
+      reply_fn: say,
+      event_label: "dm_handler_failed",
+      interaction_type,
+      allowed_tools_manifest,
+      tool_index,
+      openai_client,
+      mcp_client,
+      session_writer,
+      typing_indicator: typing,
+      confirm_fn: confirm,
+      slack_client: client,
+      channel_id: event.channel,
+      thread_ts
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Tier 3: Reaction-based feedback (reactions:read scope)
+  // Maps emoji reactions on bot messages to sentiment and logs to DB.
+  // Requires subscribing to reaction_added event in Slack app settings.
+  // -------------------------------------------------------------------------
+  app.event("reaction_added", async ({ event }) => {
+    if (event.item?.type !== "message") return;
+
+    const reaction = event.reaction;
+    let sentiment = null;
+
+    if (POSITIVE_REACTIONS.has(reaction)) sentiment = "positive";
+    else if (NEGATIVE_REACTIONS.has(reaction)) sentiment = "negative";
+    else if (BUG_REACTIONS.has(reaction)) sentiment = "bug";
+    else return;
+
+    session_writer.write_reaction_feedback({
+      slack_channel_id: event.item.channel,
+      message_ts: event.item.ts,
+      thread_ts: null,
+      slack_user_id: event.user,
+      reaction,
+      sentiment
+    });
+
+    logger.info("reaction_feedback_captured", {
+      reaction,
+      sentiment,
+      channel: event.item.channel,
+      user: event.user
     });
   });
 

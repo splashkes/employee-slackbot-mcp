@@ -12,6 +12,7 @@ function create_session_writer(sql) {
       create_session_id: () => crypto.randomUUID(),
       write_session: () => {},
       write_audit_event: () => {},
+      write_reaction_feedback: () => {},
       close: async () => {}
     };
   }
@@ -107,6 +108,29 @@ function create_session_writer(sql) {
     });
   }
 
+  /**
+   * Write a reaction-based feedback entry.
+   */
+  function write_reaction_feedback(params) {
+    safe_write("reaction_feedback", async () => {
+      await sql`
+        INSERT INTO esbmcp_reaction_feedback (
+          slack_channel_id, message_ts, thread_ts,
+          slack_user_id, reaction, sentiment
+        ) VALUES (
+          ${params.slack_channel_id},
+          ${params.message_ts},
+          ${params.thread_ts || null},
+          ${params.slack_user_id},
+          ${params.reaction},
+          ${params.sentiment}
+        )
+        ON CONFLICT (slack_channel_id, message_ts, slack_user_id, reaction)
+        DO NOTHING
+      `;
+    });
+  }
+
   async function close() {
     try {
       await sql.end({ timeout: 5 });
@@ -115,7 +139,7 @@ function create_session_writer(sql) {
     }
   }
 
-  return { create_session_id, write_session, write_audit_event, close };
+  return { create_session_id, write_session, write_audit_event, write_reaction_feedback, close };
 }
 
 export { create_session_writer };
