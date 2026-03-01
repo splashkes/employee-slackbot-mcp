@@ -21,6 +21,7 @@ import { AUDIT_EVENTS, MCP_ERROR_CODES, RISK_LEVELS } from "@abcodex/shared/cons
 import { create_session_writer } from "./session_writer.js";
 import { markdown_to_slack_mrkdwn } from "./slack_format.js";
 import { create_assistant } from "./assistant.js";
+import { build_home_blocks } from "./home_tab.js";
 
 const logger = new Logger(service_config.app.log_level);
 const role_cache_map = new Map();
@@ -1164,6 +1165,27 @@ async function start_service() {
       channel: event.item.channel,
       user: event.user
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // App Home tab (views.publish)
+  // Auto-generates tool reference from allowed-tools.json when user opens
+  // the bot's App Home. Requires subscribing to app_home_opened event.
+  // -------------------------------------------------------------------------
+  app.event("app_home_opened", async ({ event, client }) => {
+    if (event.tab !== "home") return;
+    try {
+      const blocks = build_home_blocks(allowed_tools_manifest);
+      await client.views.publish({
+        user_id: event.user,
+        view: {
+          type: "home",
+          blocks
+        }
+      });
+    } catch (err) {
+      logger.warn("app_home_publish_failed", { user: event.user, error: err?.message });
+    }
   });
 
   app.error((error) => {

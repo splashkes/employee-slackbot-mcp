@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arthur Bot — Tool Reference</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242837;
+    --border: #2e3348;
+    --text: #e2e4ea;
+    --text-muted: #8b8fa3;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --green: #00b894;
+    --orange: #fdcb6e;
+    --red: #e17055;
+    --blue: #74b9ff;
+    --pink: #fd79a8;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 0;
+  }
+
+  .hero {
+    background: linear-gradient(135deg, #1a1d27 0%, #2d1b69 50%, #1a1d27 100%);
+    padding: 60px 40px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero h1 { font-size: 2.4em; font-weight: 700; margin-bottom: 8px; }
+  .hero .subtitle { color: var(--text-muted); font-size: 1.1em; margin-bottom: 24px; }
+  .hero .stats {
+    display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;
+  }
+  .hero .stat {
+    text-align: center;
+  }
+  .hero .stat .num {
+    font-size: 2em; font-weight: 700; color: var(--accent-light);
+  }
+  .hero .stat .label { font-size: 0.85em; color: var(--text-muted); }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+
+  .how-to {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 40px;
+  }
+  .how-to h2 { font-size: 1.3em; margin-bottom: 16px; color: var(--accent-light); }
+  .modes {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .mode {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .mode .mode-name { font-weight: 600; font-size: 0.95em; margin-bottom: 4px; }
+  .mode .mode-desc { font-size: 0.82em; color: var(--text-muted); }
+
+  .domain-section {
+    margin-bottom: 36px;
+  }
+  .domain-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 6px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+  }
+  .domain-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3em;
+    flex-shrink: 0;
+  }
+  .domain-header h2 { font-size: 1.25em; font-weight: 600; }
+  .domain-header .domain-count {
+    background: var(--surface2);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.78em;
+    color: var(--text-muted);
+  }
+  .domain-desc {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin-bottom: 16px;
+    padding-left: 54px;
+  }
+  .domain-tip {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 16px;
+    margin: 12px 0 0 0;
+    font-size: 0.85em;
+    color: var(--text-muted);
+  }
+  .domain-tip strong { color: var(--accent-light); }
+
+  .tool-grid {
+    display: grid;
+    gap: 8px;
+  }
+  .tool-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    transition: border-color 0.15s;
+  }
+  .tool-card:hover { border-color: var(--accent); }
+  .tool-top {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  }
+  .tool-name {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.88em;
+    font-weight: 600;
+    color: var(--blue);
+  }
+  .badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 0.7em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-write { background: rgba(253, 121, 168, 0.15); color: var(--pink); }
+  .badge-confirm { background: rgba(225, 112, 85, 0.15); color: var(--orange); }
+  .tool-desc { font-size: 0.88em; color: var(--text-muted); margin-bottom: 8px; }
+  .tool-example {
+    font-size: 0.82em;
+    color: var(--text);
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+  .tool-example em { color: var(--green); font-style: normal; }
+
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+  }
+  .summary-table th, .summary-table td {
+    padding: 10px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9em;
+  }
+  .summary-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .summary-table td:nth-child(n+2) { text-align: center; }
+  .summary-table th:nth-child(n+2) { text-align: center; }
+  .summary-table tr:last-child { font-weight: 700; }
+
+  .reactions-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-top: 36px;
+  }
+  .reactions-section h2 { font-size: 1.2em; margin-bottom: 16px; color: var(--accent-light); }
+  .reaction-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9em;
+  }
+  .reaction-row:last-child { border-bottom: none; }
+  .reaction-emoji { font-size: 1.4em; min-width: 36px; text-align: center; }
+  .reaction-label { font-weight: 600; min-width: 80px; }
+  .reaction-desc { color: var(--text-muted); }
+
+  .footer {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--text-muted);
+    font-size: 0.82em;
+  }
+  .footer .gen-date { color: var(--accent-light); }
+
+  @media (max-width: 600px) {
+    .hero { padding: 40px 20px; }
+    .hero h1 { font-size: 1.8em; }
+    .hero .stats { gap: 24px; }
+    .domain-desc { padding-left: 0; }
+    .modes { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Arthur Bot</h1>
+  <p class="subtitle">AI Operations Assistant for Art Battle</p>
+  <div class="stats">
+    <div class="stat"><div class="num">67</div><div class="label">Tools</div></div>
+    <div class="stat"><div class="num">8</div><div class="label">Domains</div></div>
+    <div class="stat"><div class="num">5</div><div class="label">Interaction Modes</div></div>
+    <div class="stat"><div class="num">54</div><div class="label">Read-Only</div></div>
+    <div class="stat"><div class="num">13</div><div class="label">Write-Gated</div></div>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="how-to">
+    <h2>How to Use</h2>
+    <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 0.92em;">
+      Just ask naturally — no need to know tool names. Arthur figures out which tools to use and chains them together when needed.
+    </p>
+    <div class="modes">
+      <div class="mode">
+        <div class="mode-name">@Arthur Bot</div>
+        <div class="mode-desc">Mention in any channel — responds in a thread</div>
+      </div>
+      <div class="mode">
+        <div class="mode-name">Direct Message</div>
+        <div class="mode-desc">DM the bot — responds inline, no @mention needed</div>
+      </div>
+      <div class="mode">
+        <div class="mode-name">Group DM</div>
+        <div class="mode-desc">Add bot to group chat — responds to all messages</div>
+      </div>
+      <div class="mode">
+        <div class="mode-name">/ab command</div>
+        <div class="mode-desc">Slash command — private ephemeral response</div>
+      </div>
+      <div class="mode">
+        <div class="mode-name">Assistant Panel</div>
+        <div class="mode-desc">Click bot icon in Slack top bar — split-pane UI</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA READ -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(116,185,255,0.15); color: var(--blue);">📊</div>
+      <h2>Data Read</h2>
+      <span class="domain-count">15 tools · all read-only</span>
+    </div>
+    <p class="domain-desc">Event lookups, people search, artwork bids, voting data, auction revenue, and Eventbrite ticket data.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">lookup_event</span></div>
+        <div class="tool-desc">Find events by EID or search by city name. Returns event details, dates, venue, currency, and status.</div>
+        <div class="tool-example"><em>"What's happening at AB4023?"</em> · <em>"Show me upcoming Toronto events"</em> · <em>"Next 5 events in Sydney"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">lookup_person</span></div>
+        <div class="tool-desc">Search for any person (attendee, bidder, voter, artist) by name, email, or phone number.</div>
+        <div class="tool-example"><em>"Email for Tyler Ball"</em> · <em>"Who has phone +12265551234?"</em> · <em>"Find contact info for Jane Smith"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">lookup_artist_profile</span></div>
+        <div class="tool-desc">Find artist profiles with bio, country, contact info. Search by name, UUID, or person_id.</div>
+        <div class="tool-example"><em>"Look up artist Dimitri Sirenko"</em> · <em>"Artist profile for Tyler Ball"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">lookup_artwork_bids</span></div>
+        <div class="tool-desc">View artworks and their bids for an event, optionally filtered by artist or round.</div>
+        <div class="tool-example"><em>"Show me the bids for AB4023"</em> · <em>"What art sold at AB4002?"</em> · <em>"Bids for Tyler Ball at AB4002"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_vote_data</span></div>
+        <div class="tool-desc">Detailed voting data including vote counts, weights, and per-round summaries.</div>
+        <div class="tool-example"><em>"How did voting go at AB4023?"</em> · <em>"Vote breakdown for round 2 of AB4003"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">debug_event_visibility</span></div>
+        <div class="tool-desc">Diagnose why an event isn't visible to the public — checks enabled flag, app visibility, dates.</div>
+        <div class="tool-example"><em>"Why can't people see AB4023?"</em> · <em>"AB4046 isn't showing in the app"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_event_config</span></div>
+        <div class="tool-desc">Full raw event configuration row from the database.</div>
+        <div class="tool-example"><em>"Show me the full config for AB4023"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">run_event_health_check</span></div>
+        <div class="tool-desc">Find missing or misconfigured settings that could cause problems at an event.</div>
+        <div class="tool-example"><em>"Run a health check on AB4046"</em> · <em>"Anything wrong with AB4023's setup?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_event_summary</span></div>
+        <div class="tool-desc">Post-event summary with artwork, bid, and vote statistics.</div>
+        <div class="tool-example"><em>"Give me a summary of AB4002"</em> · <em>"How did AB4003 go?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_bid_history</span></div>
+        <div class="tool-desc">Bid-by-bid history for an event, optionally filtered by artwork code.</div>
+        <div class="tool-example"><em>"Bid history for AB4003"</em> · <em>"Who bid on AB4003-1-1?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_auction_timing</span></div>
+        <div class="tool-desc">Artwork closing times and round start/end timing.</div>
+        <div class="tool-example"><em>"When do auctions close at AB4023?"</em> · <em>"Round timing for AB4003"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_auction_revenue</span></div>
+        <div class="tool-desc">Auction revenue totals with optional breakdown by artist or round.</div>
+        <div class="tool-example"><em>"How much revenue did AB4002 generate?"</em> · <em>"Revenue by artist for AB4003"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_eventbrite_data</span></div>
+        <div class="tool-desc">Read locally cached Eventbrite ticket data. May be stale — use <code>refresh_eventbrite_data</code> for live numbers.</div>
+        <div class="tool-example"><em>"How many tickets sold for AB4023?"</em> · <em>"Ticket breakdown for AB4021"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_eventbrite_mapping</span></div>
+        <div class="tool-desc">Check which Eventbrite event ID is linked to an AB event.</div>
+        <div class="tool-example"><em>"What's the Eventbrite ID for AB4023?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_eventbrite_fees</span></div>
+        <div class="tool-desc">Eventbrite fee and tax breakdown for ticket sales.</div>
+        <div class="tool-example"><em>"What are the Eventbrite fees for AB4021?"</em></div>
+      </div>
+    </div>
+    <div class="domain-tip"><strong>Tip:</strong> For fresh Eventbrite numbers, say <em>"refresh ticket data for AB4023"</em> — otherwise you get cached data that may be hours old.</div>
+  </div>
+
+  <!-- PROFILE INTEGRITY -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(108, 92, 231, 0.15); color: var(--accent-light);">🎨</div>
+      <h2>Profile Integrity</h2>
+      <span class="domain-count">10 tools · 4 write-gated</span>
+    </div>
+    <p class="domain-desc">Artist profiles, invitations, event readiness checks, vote weights, and QR scans.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">find_duplicate_profiles</span></div>
+        <div class="tool-desc">Find potential duplicate artist profiles by phone, email, or similar name.</div>
+        <div class="tool-example"><em>"Are there duplicate profiles for +12265551234?"</em> · <em>"Find duplicates for Tyler Ball"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">update_artist_name</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Change an artist's display name. Requires confirmation.</div>
+        <div class="tool-example"><em>"Change artist name from 'T Ball' to 'Tyler Ball'"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">update_artist_bio</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Update an artist's ABHQ bio text. Max 5000 characters.</div>
+        <div class="tool-example"><em>"Update the bio for Tyler Ball to: 'Toronto-based painter specializing in...'"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">update_artist_country</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Update an artist's country code (2-3 letter ISO code).</div>
+        <div class="tool-example"><em>"Set Tyler Ball's country to CA"</em> · <em>"Change country to AU for Dimitri"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_artist_invitations</span></div>
+        <div class="tool-desc">View artist invitations for an event or artist — confirmed, pending, declined.</div>
+        <div class="tool-example"><em>"Who's been invited to AB4046?"</em> · <em>"How many confirmed artists for AB4061?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">send_artist_invitation</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Send an event invitation to an artist. Requires confirmation.</div>
+        <div class="tool-example"><em>"Invite Tyler Ball to AB4046"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_event_readiness</span></div>
+        <div class="tool-desc">Readiness score — checks venue, city, currency, artists, Eventbrite link, and visibility.</div>
+        <div class="tool-example"><em>"Is AB4046 ready to go?"</em> · <em>"Event readiness check for AB4023"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_vote_weights</span></div>
+        <div class="tool-desc">Vote weight factors and detailed breakdown per voter source.</div>
+        <div class="tool-example"><em>"Show vote weights for AB4003"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">refresh_vote_weights</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Manually recalculate vote weights for an event. Requires confirmation.</div>
+        <div class="tool-example"><em>"Refresh the vote weights for AB4003"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_qr_scan_status</span></div>
+        <div class="tool-desc">QR code scan activity for an event or person — scan counts, timestamps, and codes.</div>
+        <div class="tool-example"><em>"How many QR scans at AB4002?"</em> · <em>"QR scan history for person UUID"</em></div>
+      </div>
+    </div>
+    <div class="domain-tip"><strong>Note:</strong> Write operations (name/bio/country changes, invitations, vote refresh) show Confirm/Cancel buttons before executing.</div>
+  </div>
+
+  <!-- PAYMENTS -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(0, 184, 148, 0.15); color: var(--green);">💰</div>
+      <h2>Payments</h2>
+      <span class="domain-count">9 tools · 2 write-gated</span>
+    </div>
+    <p class="domain-desc">Artist balances, payment ledgers, Stripe status, exchange rates, and payment processing.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_artist_stripe_status</span></div>
+        <div class="tool-desc">Check if an artist has a connected Stripe account — charges enabled, payouts enabled, onboarding status.</div>
+        <div class="tool-example"><em>"Does Tyler Ball have Stripe set up?"</em> · <em>"Stripe status for AB4002 artists"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">process_artist_payment</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Process a Stripe payment to an artist. Requires confirmation.</div>
+        <div class="tool-example"><em>"Pay Tyler Ball $500 CAD for AB4002"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_exchange_rates</span></div>
+        <div class="tool-desc">Currency exchange rates — single currency, cross-rate between two, or all rates.</div>
+        <div class="tool-example"><em>"What's the CAD to USD rate?"</em> · <em>"Show all exchange rates"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_manual_payment_requests</span></div>
+        <div class="tool-desc">View manual payment requests (wire transfer, cheque, etc.) by event or globally.</div>
+        <div class="tool-example"><em>"Any pending manual payment requests?"</em> · <em>"Manual payments for AB4002"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_artist_payment_ledger</span></div>
+        <div class="tool-desc">Full payment history for an artist or event — amounts, statuses, Stripe transfer IDs.</div>
+        <div class="tool-example"><em>"Show payment history for Tyler Ball"</em> · <em>"All payments for AB4002"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_artists_owed</span></div>
+        <div class="tool-desc">Calculate outstanding artist balances. Credits = sale price × auction portion. Multi-currency supported.</div>
+        <div class="tool-example"><em>"How much do we owe artists?"</em> · <em>"What's owed for AB4002?"</em> · <em>"Total outstanding by currency"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_payment_status_health</span></div>
+        <div class="tool-desc">Cross-check: find sold artwork with no payment record, or status mismatches.</div>
+        <div class="tool-example"><em>"Check payment health for AB4002"</em> · <em>"Any unpaid sold art?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_payment_invitations</span></div>
+        <div class="tool-desc">View Stripe onboarding invitations sent to artists.</div>
+        <div class="tool-example"><em>"Has Tyler Ball been sent a payment setup invite?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">send_payment_reminder</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Send a Stripe onboarding reminder to an artist. Requires confirmation.</div>
+        <div class="tool-example"><em>"Send Tyler Ball a payment setup reminder"</em></div>
+      </div>
+    </div>
+    <div class="domain-tip"><strong>Balance formula:</strong> Credits = sale price × event's artist_auction_portion (dynamic per event). Debits = payments made (excluding cancelled). Balance = max(0, credits − debits).</div>
+  </div>
+
+  <!-- GROWTH MARKETING -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(253, 203, 110, 0.15); color: var(--orange);">📈</div>
+      <h2>Growth Marketing</h2>
+      <span class="domain-count">7 tools · all read-only</span>
+    </div>
+    <p class="domain-desc">Meta ads performance, SMS campaigns, audience sizing, promotional offers, and sponsorship data.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_meta_ads_data</span></div>
+        <div class="tool-desc">Facebook/Instagram ad performance — impressions, clicks, spend, conversions.</div>
+        <div class="tool-example"><em>"How are the Meta ads doing for AB4023?"</em> · <em>"Ad spend for the Toronto event"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_sms_campaigns</span></div>
+        <div class="tool-desc">SMS campaign details for an event — status, audience, message content.</div>
+        <div class="tool-example"><em>"Show SMS campaigns for AB4023"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_sms_audience_count</span></div>
+        <div class="tool-desc">Estimated audience size for an SMS blast by audience filter type.</div>
+        <div class="tool-example"><em>"How many people would an SMS to Toronto reach?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_sms_conversation</span></div>
+        <div class="tool-desc">Full SMS conversation history for a phone number — inbound and outbound.</div>
+        <div class="tool-example"><em>"Show SMS history for +12265551234"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_notification_status</span></div>
+        <div class="tool-desc">SMS/notification queue health — sent, failed, and pending counts.</div>
+        <div class="tool-example"><em>"Check notification status for AB4023"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_active_offers</span></div>
+        <div class="tool-desc">Promotional offers and redemption counts for an event.</div>
+        <div class="tool-example"><em>"Any active offers for AB4023?"</em> · <em>"Promo code usage for Toronto"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_sponsorship_summary</span></div>
+        <div class="tool-desc">Sponsorship invites, purchases, and committed revenue.</div>
+        <div class="tool-example"><em>"Show sponsorship revenue for AB4023"</em></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVENTBRITE CHARTS -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(253, 121, 168, 0.15); color: var(--pink);">📉</div>
+      <h2>Eventbrite Charts</h2>
+      <span class="domain-count">10 tools · 3 write-gated</span>
+    </div>
+    <p class="domain-desc">Live Eventbrite data, ticket sales pace charts with smart comparator selection, and scheduled autoposting.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">refresh_eventbrite_data</span></div>
+        <div class="tool-desc">Pull LIVE data from the Eventbrite API and update the local cache. Use this for current numbers.</div>
+        <div class="tool-example"><em>"Refresh ticket data for AB4023"</em> · <em>"Get me the latest numbers for AB4021"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">verify_eventbrite_config</span></div>
+        <div class="tool-desc">Test Eventbrite API connectivity — token validity, org access, event mapping, reachability.</div>
+        <div class="tool-example"><em>"Is Eventbrite working for AB4023?"</em> · <em>"Diagnose Eventbrite issues"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_chart_comparators</span></div>
+        <div class="tool-desc">Score and rank potential comparator events by city match, scale, price, recency, and day-of-week.</div>
+        <div class="tool-example"><em>"What comparators would you pick for AB4046?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">set_chart_comparators</span> <span class="badge badge-write">write</span></div>
+        <div class="tool-desc">Lock specific comparator events for a chart instead of auto-selecting.</div>
+        <div class="tool-example"><em>"Use AB4002 and AB3982 as comparators for AB4046"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">generate_chart</span></div>
+        <div class="tool-desc">Generate a ticket sales pace chart, uploaded as an image to Slack. Auto-refreshes stale data.</div>
+        <div class="tool-example"><em>"Generate a ticket chart for AB4023"</em> · <em>"Chart AB4046 vs AB4002"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">schedule_chart_autopost</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Schedule recurring ticket pace charts to auto-post to a Slack channel.</div>
+        <div class="tool-example"><em>"Post a ticket chart for AB4046 to this channel every day at 9am"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_chart_schedule</span></div>
+        <div class="tool-desc">List all active, paused, and completed chart autopost schedules.</div>
+        <div class="tool-example"><em>"What chart schedules are active?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">update_chart_schedule</span> <span class="badge badge-write">write</span></div>
+        <div class="tool-desc">Pause, resume, run immediately, or cancel a chart autopost schedule.</div>
+        <div class="tool-example"><em>"Pause the chart schedule for AB4046"</em> · <em>"Run the AB4023 chart now"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_chart_history</span></div>
+        <div class="tool-desc">View recent chart posts, skipped runs, and render details for an event.</div>
+        <div class="tool-example"><em>"Show chart history for AB4023"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_chart_scheduler_status</span></div>
+        <div class="tool-desc">Scheduler health overview — active jobs, recent posts, error counts, skip rates.</div>
+        <div class="tool-example"><em>"How's the chart scheduler doing?"</em></div>
+      </div>
+    </div>
+    <div class="domain-tip"><strong>Tip:</strong> Charts are uploaded as images directly in Slack. Comparators are auto-selected by city, scale, and recency — or lock specific ones with <code>set_chart_comparators</code>.</div>
+  </div>
+
+  <!-- PLATFORM OPS -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(225, 112, 85, 0.15); color: var(--red);">🔧</div>
+      <h2>Platform Ops</h2>
+      <span class="domain-count">10 tools · 2 write-gated</span>
+    </div>
+    <p class="domain-desc">Bot health monitoring, email/Slack queue diagnostics, live event debugging, bug reports, and self-introspection.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_slack_queue_health</span></div>
+        <div class="tool-desc">Slack notification queue status — sent, failed, and pending counts with recent failures.</div>
+        <div class="tool-example"><em>"Check Slack queue health"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_email_queue_stats</span></div>
+        <div class="tool-desc">Email delivery stats for the last N hours.</div>
+        <div class="tool-example"><em>"How are emails doing today?"</em> · <em>"Email stats last 24 hours"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_email_log</span></div>
+        <div class="tool-desc">Search email logs by recipient address or event.</div>
+        <div class="tool-example"><em>"Show emails sent to tyler@gmail.com"</em> · <em>"Email log for AB4023"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">check_rls_policies</span></div>
+        <div class="tool-desc">Check Row Level Security policies on database tables.</div>
+        <div class="tool-example"><em>"Check RLS on the events table"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">live_event_diagnostic</span></div>
+        <div class="tool-desc">Comprehensive live event diagnostic — config, rounds, contestants, artworks, bid/vote counts, cache status.</div>
+        <div class="tool-example"><em>"Run a live diagnostic on AB4023"</em> · <em>"Full diagnostic for the event happening now"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_bot_errors</span></div>
+        <div class="tool-desc">Review the bot's recent tool errors with error type, message, and SQL preview.</div>
+        <div class="tool-example"><em>"Show me recent errors"</em> · <em>"Any tool failures today?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_bot_sessions</span></div>
+        <div class="tool-desc">Review the bot's recent chat sessions — prompts, responses, tools used, timing.</div>
+        <div class="tool-example"><em>"Show recent bot activity"</em> · <em>"What's Chris been asking?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_bot_tool_stats</span></div>
+        <div class="tool-desc">Tool usage statistics — call counts, error rates, average duration.</div>
+        <div class="tool-example"><em>"Which tools get used most?"</em> · <em>"Tool stats for the last week"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">create_bug_report</span> <span class="badge badge-write">write</span></div>
+        <div class="tool-desc">File a bug report with title, description, and priority. Tracked in the database.</div>
+        <div class="tool-example"><em>"File a bug: the artist count for AB4061 is wrong"</em> · <em>"Bug report: Eventbrite data not refreshing"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_bug_reports</span></div>
+        <div class="tool-desc">List bug reports filed through the bot — open, in-progress, and resolved.</div>
+        <div class="tool-example"><em>"Show me open bug reports"</em> · <em>"Any high priority bugs?"</em></div>
+      </div>
+    </div>
+    <div class="domain-tip"><strong>Tip:</strong> Arthur can introspect on himself — ask about his own errors, sessions, and tool usage for debugging.</div>
+  </div>
+
+  <!-- MEMORY -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(162, 155, 254, 0.15); color: var(--accent-light);">🧠</div>
+      <h2>Memory</h2>
+      <span class="domain-count">4 tools · 2 write-gated</span>
+    </div>
+    <p class="domain-desc">Per-channel and per-tool contextual memory with versioning and rollback. Memory persists across conversations.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_memory</span></div>
+        <div class="tool-desc">Load saved context for this channel or for a specific tool. Loaded automatically when relevant.</div>
+        <div class="tool-example"><em>Automatic — loaded when the bot needs context about a channel or tool</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">update_memory</span> <span class="badge badge-write">write</span></div>
+        <div class="tool-desc">Save context notes for a channel or tool. Versioned — each update creates a new version.</div>
+        <div class="tool-example"><em>"Remember that AB4046 is the big Toronto launch event"</em> · <em>"Note: this channel tracks Montreal events"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">rollback_memory</span> <span class="badge badge-write">write</span> <span class="badge badge-confirm">confirm</span></div>
+        <div class="tool-desc">Revert memory to a previous version. Requires confirmation.</div>
+        <div class="tool-example"><em>"Rollback channel memory to version 2"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_memory_versions</span></div>
+        <div class="tool-desc">List version history for a channel or tool memory with change summaries.</div>
+        <div class="tool-example"><em>"Show memory versions for this channel"</em></div>
+      </div>
+    </div>
+    <div class="domain-tip"><strong>How it works:</strong> Channel memory gives the bot context about what's important in each channel. Tool memory stores known quirks and workarounds for specific tools. Both auto-load when relevant.</div>
+  </div>
+
+  <!-- SLACK KNOWLEDGE -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(116, 185, 255, 0.15); color: var(--blue);">🔍</div>
+      <h2>Slack Knowledge</h2>
+      <span class="domain-count">2 tools · all read-only</span>
+    </div>
+    <p class="domain-desc">Semantic search over archived Slack conversations. Uses AI matching — no exact keywords needed.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">search_slack_knowledge</span></div>
+        <div class="tool-desc">Search historical Slack conversations by meaning, not just keywords. Returns channel, date, user, and permalink.</div>
+        <div class="tool-example"><em>"What was discussed about the Toronto venue change?"</em> · <em>"Find Slack messages about sponsorship pricing"</em> · <em>"What did Chris say about the new payment flow?"</em></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-top"><span class="tool-name">get_slack_knowledge_stats</span></div>
+        <div class="tool-desc">Index statistics — number of indexed channels, messages, embedding model info.</div>
+        <div class="tool-example"><em>"How big is the Slack knowledge index?"</em></div>
+      </div>
+    </div>
+    <div class="domain-tip"><strong>Tip:</strong> Results include a link back to the original Slack message. You can filter by channel, user, or date range.</div>
+  </div>
+
+  <!-- SUMMARY TABLE -->
+  <div class="domain-section">
+    <div class="domain-header">
+      <div class="domain-icon" style="background: rgba(226, 228, 234, 0.1); color: var(--text);">📋</div>
+      <h2>Summary</h2>
+    </div>
+    <table class="summary-table">
+      <thead>
+        <tr><th>Domain</th><th>Read</th><th>Write</th><th>Total</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Data Read</td><td>15</td><td>0</td><td>15</td></tr>
+        <tr><td>Profile Integrity</td><td>6</td><td>4</td><td>10</td></tr>
+        <tr><td>Payments</td><td>7</td><td>2</td><td>9</td></tr>
+        <tr><td>Growth Marketing</td><td>7</td><td>0</td><td>7</td></tr>
+        <tr><td>Eventbrite Charts</td><td>7</td><td>3</td><td>10</td></tr>
+        <tr><td>Platform Ops</td><td>8</td><td>2</td><td>10</td></tr>
+        <tr><td>Memory</td><td>2</td><td>2</td><td>4</td></tr>
+        <tr><td>Slack Knowledge</td><td>2</td><td>0</td><td>2</td></tr>
+        <tr><td><strong>Total</strong></td><td><strong>54</strong></td><td><strong>13</strong></td><td><strong>67</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- REACTIONS -->
+  <div class="reactions-section">
+    <h2>Emoji Reactions — Feedback Loop</h2>
+    <p style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 16px;">React to any bot message to give feedback. Arthur reacts back to acknowledge and logs the sentiment for quality tracking.</p>
+    <div class="reaction-row">
+      <span class="reaction-emoji">👍</span>
+      <span class="reaction-label" style="color: var(--green);">Positive</span>
+      <span class="reaction-desc">thumbsup, fire, rocket, trophy, heart, clap, 100, tada, star, pray, ok_hand, and more → bot reacts 🙌</span>
+    </div>
+    <div class="reaction-row">
+      <span class="reaction-emoji">👎</span>
+      <span class="reaction-label" style="color: var(--red);">Negative</span>
+      <span class="reaction-desc">thumbsdown, x, facepalm, angry, skull, confused, disappointed, poop, and more → bot reacts 👀</span>
+    </div>
+    <div class="reaction-row">
+      <span class="reaction-emoji">🐛</span>
+      <span class="reaction-label" style="color: var(--orange);">Bug</span>
+      <span class="reaction-desc">bug, beetle, wrench, hammer_and_wrench → bot reacts 📝</span>
+    </div>
+    <div class="reaction-row">
+      <span class="reaction-emoji">🤷</span>
+      <span class="reaction-label" style="color: var(--text-muted);">Neutral</span>
+      <span class="reaction-desc">Anything else — bot reacts with a random confused emoji (🤔 🧐 🙃 ❓)</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <p>Arthur Bot · Art Battle Operations · <span class="gen-date">67 tools across 8 domains</span></p>
+  <p style="margin-top: 4px;">Generated from <code>config/allowed-tools.json</code> · Auto-syncs on deploy</p>
+</div>
+
+</body>
+</html>
