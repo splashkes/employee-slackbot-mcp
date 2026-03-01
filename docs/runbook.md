@@ -413,7 +413,97 @@ GROUP BY interaction_type ORDER BY sessions DESC;
 SELECT esbmcp_cleanup_old_data(90);
 ```
 
-## 12. Run SQL on Live DB
+## 12. Feedback-Driven Development Loop
+
+Use reaction feedback and bug reports as a continuous improvement cycle. This is the primary mechanism for identifying tool bugs, AI routing issues, and missing capabilities.
+
+### 12.1 Check reaction feedback
+
+Emoji reactions on bot messages are logged with sentiment classification (positive, negative, bug, neutral). The bot reacts back to acknowledge receipt.
+
+```sql
+-- Sentiment breakdown (last 7 days)
+SELECT sentiment, COUNT(*) AS count
+FROM esbmcp_reaction_feedback
+WHERE created_at > NOW() - INTERVAL '7 days'
+GROUP BY sentiment ORDER BY count DESC;
+
+-- Negative and bug reactions — investigate these first
+SELECT rf.slack_channel_id, rf.message_ts, rf.slack_user_id,
+       rf.reaction, rf.sentiment, rf.created_at
+FROM esbmcp_reaction_feedback rf
+WHERE rf.sentiment IN ('negative', 'bug')
+ORDER BY rf.created_at DESC LIMIT 20;
+```
+
+To investigate a specific negative reaction, find the matching chat session:
+```sql
+-- Find the conversation that received the bad reaction
+SELECT cs.user_prompt, cs.ai_response, cs.tools_called, cs.status
+FROM esbmcp_chat_sessions cs
+WHERE cs.slack_channel_id = '<channel_id>'
+  AND cs.created_at <= '<reaction_created_at>'
+ORDER BY cs.created_at DESC LIMIT 1;
+```
+
+### 12.2 Check bug reports
+
+Bug reports are filed by employees via the bot (`@Arthur Bot file a bug report`). They contain structured descriptions and can be queried for patterns.
+
+```sql
+-- Open bugs, newest first
+SELECT id, title, description, priority, status, slack_user_id, created_at
+FROM esbmcp_bug_reports
+WHERE status IN ('open', 'in_progress')
+ORDER BY created_at DESC;
+
+-- Resolve a bug after fixing
+UPDATE esbmcp_bug_reports
+SET status = 'resolved', resolved_at = NOW()
+WHERE id = '<bug_id>';
+```
+
+### 12.3 Investigation workflow
+
+For each bug or negative reaction:
+
+1. **Find the session**: Query `esbmcp_chat_sessions` by channel/user/time to see the full prompt, response, and tools called.
+2. **Check tool execution**: Query `esbmcp_tool_executions` for the session's tool calls — look at `arguments_preview`, `ok`, `duration_ms`.
+3. **Check tool errors**: Query `esbmcp_tool_errors` for detailed error messages, SQL previews, and stack traces.
+4. **Classify the issue**:
+   - **Tool data bug** — SQL query returns wrong data (fix the query in `services/mcp-gateway/src/tools/`)
+   - **AI routing error** — AI called the wrong tool or passed wrong arguments (fix tool descriptions in `config/allowed-tools.json`)
+   - **AI hallucination** — AI fabricated data not in tool results (add guardrails to system prompt)
+   - **Stale cache** — cached data was too old (operational, not a code fix)
+   - **Data gap** — expected data doesn't exist in the database (flag for data team)
+   - **Feature request** — user wants something the system can't do yet
+
+```sql
+-- Full investigation query: session + tool executions for a time window
+SELECT cs.user_prompt, cs.ai_response, cs.tools_called,
+       cs.status, cs.error_message, cs.created_at
+FROM esbmcp_chat_sessions cs
+WHERE cs.slack_user_id = '<user_id>'
+  AND cs.created_at > NOW() - INTERVAL '24 hours'
+ORDER BY cs.created_at DESC LIMIT 10;
+
+-- Tool errors for a specific tool
+SELECT * FROM esbmcp_v_unresolved_errors
+WHERE tool_name = '<tool_name>'
+ORDER BY created_at DESC LIMIT 5;
+```
+
+### 12.4 Common fix patterns
+
+| Issue Type | Where to Fix | Example |
+|-----------|-------------|---------|
+| Wrong SQL results | `services/mcp-gateway/src/tools/<domain>.js` | JOIN type, WHERE filter, column name |
+| AI picks wrong tool | `config/allowed-tools.json` → `description` | Clarify when to use tool A vs B |
+| AI masks PII | `services/slackbot/src/openai_router.js` → system prompt | Already handled for ops role |
+| Missing tool parameter | `config/allowed-tools.json` → `parameters_schema` | Add description to guide AI |
+| Duplicate key errors | Tool SQL → add `ON CONFLICT` clause | Upsert instead of insert |
+
+## 13. Run SQL on Live DB
 
 For quick one-off queries, exec into a pod:
 ```bash

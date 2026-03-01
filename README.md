@@ -94,6 +94,17 @@ All interactions are logged to `esbmcp_` prefixed tables in Supabase Postgres:
 
 Pre-built views for daily volume, user activity, tool usage, error digests, and unresolved errors.
 
+### Feedback-Driven Development
+
+Emoji reactions and bug reports create a continuous improvement loop:
+
+1. **Reactions** — employees react to bot responses with emoji. The bot classifies sentiment (positive/negative/bug/neutral from ~70 emoji), reacts back to acknowledge, and logs to `esbmcp_reaction_feedback`.
+2. **Bug reports** — employees tell the bot to file a bug (`@Arthur Bot file a bug report about...`). Logged to `esbmcp_bug_reports` with priority and status tracking.
+3. **Investigation** — query sessions, tool executions, and errors around the flagged interaction to classify the root cause (tool bug, AI routing error, data gap, etc.).
+4. **Fix** — apply the fix (SQL query, tool description, system prompt) and redeploy.
+
+See [docs/runbook.md § 12](docs/runbook.md) for the full investigation workflow and common fix patterns.
+
 ## Infrastructure
 
 | Component | Provider | Details |
