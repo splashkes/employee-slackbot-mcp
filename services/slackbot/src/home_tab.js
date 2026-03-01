@@ -1,145 +1,207 @@
 // ---------------------------------------------------------------------------
-// App Home tab builder — generates Block Kit blocks from allowed-tools.json
+// App Home tab builder — user-friendly guide with example questions
 //
 // Published via views.publish when a user opens the App Home tab.
-// Automatically stays in sync with the tool manifest — no manual updates.
+// Tool count pulled from the manifest so it stays accurate automatically.
 //
 // Requires: Subscribe to app_home_opened event in Slack app settings.
 // ---------------------------------------------------------------------------
 
-const DOMAIN_LABELS = {
-  "data-read": { emoji: ":mag:", title: "Data & Events" },
-  "profile-integrity": { emoji: ":bust_in_silhouette:", title: "Profile & Artists" },
-  "payments": { emoji: ":moneybag:", title: "Payments" },
-  "growth-marketing": { emoji: ":chart_with_upwards_trend:", title: "Growth & Marketing" },
-  "platform-db-edge": { emoji: ":gear:", title: "Platform Ops" },
-  "eventbrite-charts": { emoji: ":bar_chart:", title: "Eventbrite Charts" },
-  "memory": { emoji: ":brain:", title: "Memory" },
-  "slack-knowledge": { emoji: ":speech_balloon:", title: "Slack Knowledge" }
-};
-
-const DOMAIN_ORDER = [
-  "data-read", "profile-integrity", "payments", "growth-marketing",
-  "platform-db-edge", "eventbrite-charts", "memory", "slack-knowledge"
-];
-
-function truncate(text, max_len) {
-  if (!text || text.length <= max_len) return text || "";
-  return text.slice(0, max_len - 1) + "…";
-}
-
 export function build_home_blocks(allowed_tools_manifest) {
-  const tools = allowed_tools_manifest?.tools || [];
+  const tool_count = allowed_tools_manifest?.tools?.length || 0;
 
-  // Group by domain
-  const by_domain = {};
-  for (const tool of tools) {
-    const domain = tool.domain || "other";
-    if (!by_domain[domain]) by_domain[domain] = [];
-    by_domain[domain].push(tool);
+  // Count domains
+  const domains = new Set();
+  for (const t of allowed_tools_manifest?.tools || []) {
+    if (t.domain) domains.add(t.domain);
   }
 
-  const blocks = [];
-
-  // Header
-  blocks.push({
-    type: "header",
-    text: { type: "plain_text", text: "Arthur Bot — Tool Reference", emoji: true }
-  });
-
-  blocks.push({
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: `*${tools.length} tools* across ${Object.keys(by_domain).length} domains. Ask me anything in natural language — I'll pick the right tools automatically.\n\n_Try: "Show me upcoming events in Toronto" or "What's the payment balance for artist Jane Smith?"_`
-    }
-  });
-
-  blocks.push({ type: "divider" });
-
-  // Quick start
-  blocks.push({
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: "*:rocket: Quick Start*\n• `@Arthur Bot` in any channel\n• `/ab` slash command (private response)\n• DM me directly\n• Click my icon in the top bar for the Assistant panel"
-    }
-  });
-
-  blocks.push({ type: "divider" });
-
-  // Domain sections — use compact format to stay within 100-block limit
-  for (const domain of DOMAIN_ORDER) {
-    const domain_tools = by_domain[domain];
-    if (!domain_tools || domain_tools.length === 0) continue;
-
-    const label = DOMAIN_LABELS[domain] || { emoji: ":wrench:", title: domain };
-
-    blocks.push({
+  return [
+    // ---- Hero ----
+    {
       type: "header",
-      text: { type: "plain_text", text: `${label.emoji}  ${label.title}  (${domain_tools.length})`, emoji: true }
-    });
+      text: { type: "plain_text", text: "Welcome to Arthur Bot", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `Your AI operations assistant for Art Battle. Just ask me a question in plain English — I have access to *${tool_count} tools* and I'll figure out which ones to use.\n\nNo special syntax needed. Ask like you'd ask a coworker.`
+      }
+    },
+    { type: "divider" },
 
-    // Build a compact list — each tool as a single mrkdwn line
-    // Batch tools into sections of ~5 to stay within text limits
-    const batch_size = 5;
-    for (let i = 0; i < domain_tools.length; i += batch_size) {
-      const batch = domain_tools.slice(i, i + batch_size);
-      const lines = batch.map((t) => {
-        const risk_badge = t.risk_level === "low" ? "" : ` :warning: _${t.risk_level} risk_`;
-        const desc = truncate(t.description, 200);
-        return `*\`${t.tool_name}\`*${risk_badge}\n${desc}`;
-      });
-
-      blocks.push({
-        type: "section",
-        text: { type: "mrkdwn", text: lines.join("\n\n") }
-      });
-    }
-
-    blocks.push({ type: "divider" });
-  }
-
-  // Handle any domains not in DOMAIN_ORDER
-  for (const [domain, domain_tools] of Object.entries(by_domain)) {
-    if (DOMAIN_ORDER.includes(domain)) continue;
-    const label = DOMAIN_LABELS[domain] || { emoji: ":wrench:", title: domain };
-
-    blocks.push({
+    // ---- How to reach me ----
+    {
       type: "header",
-      text: { type: "plain_text", text: `${label.emoji}  ${label.title}  (${domain_tools.length})`, emoji: true }
-    });
-
-    const lines = domain_tools.map((t) => {
-      const desc = truncate(t.description, 200);
-      return `*\`${t.tool_name}\`*\n${desc}`;
-    });
-
-    blocks.push({
+      text: { type: "plain_text", text: ":speech_balloon:  How to Talk to Me", emoji: true }
+    },
+    {
       type: "section",
-      text: { type: "mrkdwn", text: lines.join("\n\n") }
-    });
+      text: {
+        type: "mrkdwn",
+        text: "*In a channel* — `@Arthur Bot` followed by your question. I'll reply in a thread.\n\n*In a DM* — just message me directly, no @ needed.\n\n*Slash command* — type `/ab` followed by your question for a private response only you can see.\n\n*Assistant panel* — click my icon in the Slack sidebar for a dedicated chat panel."
+      }
+    },
+    { type: "divider" },
 
-    blocks.push({ type: "divider" });
-  }
+    // ---- Events & Data ----
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":calendar:  Events & Data", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Look up any event, check auction results, find attendees, and review event health.\n\n" +
+          ":small_blue_diamond: _\"Show me the details for AB4003\"_\n" +
+          ":small_blue_diamond: _\"What events are coming up in Toronto?\"_\n" +
+          ":small_blue_diamond: _\"How many bids were there at the last Sydney event?\"_\n" +
+          ":small_blue_diamond: _\"Run a health check on AB4050\"_\n" +
+          ":small_blue_diamond: _\"What was the auction revenue for AB4045?\"_\n" +
+          ":small_blue_diamond: _\"Find the person who registered with the email jane@example.com\"_\n" +
+          ":small_blue_diamond: _\"Look up the bid history for artwork 12345\"_"
+      }
+    },
+    { type: "divider" },
 
-  // Emoji feedback section
-  blocks.push({
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: "*:sparkles: Emoji Feedback*\nReact to any of my messages to give feedback:\n• :thumbsup: :heart: :fire: :tada: — positive\n• :thumbsdown: :x: :confused: — negative\n• :bug: :wrench: — report a bug\n• Any other emoji — I'll react back with a :thinking_face:"
+    // ---- Artists & Profiles ----
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":art:  Artists & Profiles", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Search for artists, check invitations, update profiles, and find duplicates.\n\n" +
+          ":small_blue_diamond: _\"Look up artist Maria Santos\"_\n" +
+          ":small_blue_diamond: _\"Has Tyler Ball been invited to any upcoming events?\"_\n" +
+          ":small_blue_diamond: _\"Check if there are duplicate profiles for Sarah Chen\"_\n" +
+          ":small_blue_diamond: _\"What's the event readiness for AB4050?\"_\n" +
+          ":small_blue_diamond: _\"Show me the QR scan status for AB4048\"_\n" +
+          ":small_blue_diamond: _\"Update the artist bio for artist ID 5678\"_"
+      }
+    },
+    { type: "divider" },
+
+    // ---- Payments ----
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":money_with_wings:  Payments", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Check balances, review payment history, and manage payouts.\n\n" +
+          ":small_blue_diamond: _\"What's the payment balance for artist Jane Smith?\"_\n" +
+          ":small_blue_diamond: _\"Show me all artists who are owed money\"_\n" +
+          ":small_blue_diamond: _\"What's the payment ledger for artist ID 1234?\"_\n" +
+          ":small_blue_diamond: _\"Check the Stripe status for artist Maria Santos\"_\n" +
+          ":small_blue_diamond: _\"Are there any pending manual payment requests?\"_\n" +
+          ":small_blue_diamond: _\"What are today's exchange rates?\"_"
+      }
+    },
+    { type: "divider" },
+
+    // ---- Ticket Sales & Charts ----
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":chart_with_upwards_trend:  Ticket Sales & Charts", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Generate ticket sales pace charts, compare events, and set up automatic chart posting.\n\n" +
+          ":small_blue_diamond: _\"Generate a ticket sales chart for AB4050\"_\n" +
+          ":small_blue_diamond: _\"Show me how AB4050 compares to similar past events\"_\n" +
+          ":small_blue_diamond: _\"Set up a daily chart autopost for AB4050 in this channel\"_\n" +
+          ":small_blue_diamond: _\"What chart schedules are active right now?\"_\n" +
+          ":small_blue_diamond: _\"Refresh the Eventbrite data for AB4050\"_"
+      }
+    },
+    { type: "divider" },
+
+    // ---- Marketing & Growth ----
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":mega:  Marketing & Growth", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Check ad campaigns, SMS audiences, offers, and sponsorships.\n\n" +
+          ":small_blue_diamond: _\"Show me the Meta ads data for the last 7 days\"_\n" +
+          ":small_blue_diamond: _\"How many people are in the SMS audience for Toronto?\"_\n" +
+          ":small_blue_diamond: _\"What active offers are running right now?\"_\n" +
+          ":small_blue_diamond: _\"Give me a sponsorship summary\"_"
+      }
+    },
+    { type: "divider" },
+
+    // ---- Slack Search ----
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":mag:  Search Slack History", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Search across historical Slack conversations to find past discussions.\n\n" +
+          ":small_blue_diamond: _\"What was discussed about the venue change for Toronto?\"_\n" +
+          ":small_blue_diamond: _\"Find Slack conversations about the new bidding system\"_\n" +
+          ":small_blue_diamond: _\"What did the team say about the Sydney sponsorship deal?\"_"
+      }
+    },
+    { type: "divider" },
+
+    // ---- Platform & Bugs ----
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":wrench:  Platform & Troubleshooting", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Check system health, review errors, and file bug reports.\n\n" +
+          ":small_blue_diamond: _\"Are there any recent bot errors?\"_\n" +
+          ":small_blue_diamond: _\"Show me the email queue stats\"_\n" +
+          ":small_blue_diamond: _\"File a bug report about the checkout not loading\"_\n" +
+          ":small_blue_diamond: _\"What are the most-used tools this week?\"_"
+      }
+    },
+    { type: "divider" },
+
+    // ---- Tips ----
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":bulb:  Tips", emoji: true }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Ask follow-ups* — Reply in the same thread and I'll remember the context.\n\n" +
+          "*Combine questions* — _\"Look up AB4050 and generate a ticket chart for it\"_ works.\n\n" +
+          "*Be specific* — Event IDs (like AB4050) and names help me find the right data faster.\n\n" +
+          "*Write actions need confirmation* — If I'm about to change something (update a name, process a payment), I'll ask you to confirm first with a button."
+      }
+    },
+    { type: "divider" },
+
+    // ---- Feedback ----
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*:sparkles: Give Feedback*\nReact to any of my messages with an emoji and I'll log it:\n\n:thumbsup: :heart: :fire: :tada:  —  helpful response\n:thumbsdown: :x: :confused:  —  something was wrong\n:bug: :wrench:  —  report a bug\n\nYou can also tell me directly: _\"File a bug report about...\"_"
+      }
     }
-  });
-
-  // Enforce Slack's 100-block limit
-  if (blocks.length > 100) {
-    blocks.length = 99;
-    blocks.push({
-      type: "section",
-      text: { type: "mrkdwn", text: "_...and more. Ask me to list tools in any domain for details._" }
-    });
-  }
-
-  return blocks;
+  ];
 }
