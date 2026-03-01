@@ -66,6 +66,20 @@ const OPEN_VIEWER_CHANNELS = new Set(
   (process.env.OPEN_VIEWER_CHANNELS || "C0AHV5ZCJG4").split(",").map((s) => s.trim()).filter(Boolean)
 );
 
+// Cache channel types to avoid repeated conversations.info calls
+const channel_type_cache = new Map();
+async function is_group_dm_channel(client, channel_id) {
+  if (channel_type_cache.has(channel_id)) return channel_type_cache.get(channel_id);
+  try {
+    const info = await client.conversations.info({ channel: channel_id });
+    const is_mpim = info.channel?.is_mpim === true;
+    channel_type_cache.set(channel_id, is_mpim);
+    return is_mpim;
+  } catch {
+    return false;
+  }
+}
+
 // Reaction sentiment classification for Tier 3 feedback
 const POSITIVE_REACTIONS = new Set(["thumbsup", "+1", "white_check_mark", "100", "tada", "heart", "star"]);
 const NEGATIVE_REACTIONS = new Set(["thumbsdown", "-1", "x", "confused", "disappointed", "face_with_rolling_eyes"]);
@@ -998,7 +1012,8 @@ async function start_service() {
   app.event("app_mention", async ({ event, body, say, client }) => {
     // In group DMs (mpim), reply inline unless already in a thread — same as DM handler.
     // In regular channels, always thread (thread_ts = event.ts starts a new thread).
-    const is_group_dm = event.channel_type === "mpim";
+    // Note: event.channel_type is NOT set on app_mention events, so we use conversations.info.
+    const is_group_dm = await is_group_dm_channel(client, event.channel);
     const thread_ts = is_group_dm
       ? (event.thread_ts || null)
       : (event.thread_ts || event.ts);

@@ -52,7 +52,7 @@ async function lookup_event({ eid, city, limit }, sql) {
 }
 
 async function lookup_person({ query, search_by }, sql) {
-  const field = search_by || "email";
+  const field = search_by || "name";
   let rows;
 
   if (field === "email") {
