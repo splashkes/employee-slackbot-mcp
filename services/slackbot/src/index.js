@@ -1171,16 +1171,17 @@ async function start_service() {
   // App Home tab (views.publish)
   // Auto-generates tool reference from allowed-tools.json when user opens
   // the bot's App Home. Requires subscribing to app_home_opened event.
+  // Blocks are built once at startup since the manifest doesn't change.
   // -------------------------------------------------------------------------
+  const home_blocks = build_home_blocks(allowed_tools_manifest);
   app.event("app_home_opened", async ({ event, client }) => {
     if (event.tab !== "home") return;
     try {
-      const blocks = build_home_blocks(allowed_tools_manifest);
       await client.views.publish({
         user_id: event.user,
         view: {
           type: "home",
-          blocks
+          blocks: home_blocks
         }
       });
     } catch (err) {

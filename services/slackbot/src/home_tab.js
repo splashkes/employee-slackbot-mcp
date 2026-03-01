@@ -10,12 +10,6 @@
 export function build_home_blocks(allowed_tools_manifest) {
   const tool_count = allowed_tools_manifest?.tools?.length || 0;
 
-  // Count domains
-  const domains = new Set();
-  for (const t of allowed_tools_manifest?.tools || []) {
-    if (t.domain) domains.add(t.domain);
-  }
-
   return [
     // ---- Hero ----
     {
