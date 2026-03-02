@@ -76,7 +76,7 @@ async function load_event_attendees(sql, eventbrite_id) {
       SELECT order_created, attendee_count, gross
       FROM eventbrite_orders_cache
       WHERE eventbrite_event_id = ${eventbrite_id}
-        AND order_status = 'placed'
+        AND order_status IN ('placed', 'Attending')
       ORDER BY order_created
     `;
     if (order_rows.length > 0) {

@@ -64,7 +64,7 @@ function remove_bot_mentions(raw_text) {
 }
 
 // Intent-override: analysis words force GPT review even on passthrough tools
-const ANALYSIS_PATTERN = /\b(analy[sz]e|evaluat|compar|explain|interpret|assess|why\s)/i;
+const ANALYSIS_PATTERN = /\b(analy[sz]e|evaluat|compar|explain|interpret|assess|why\s|generat|chart|graph|visuali[sz])/i;
 
 // Channels where any user gets read-only (viewer) access without being whitelisted
 const OPEN_VIEWER_CHANNELS = new Set(
