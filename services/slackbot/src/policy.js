@@ -95,9 +95,14 @@ function apply_email_redaction(input_text) {
 }
 
 function apply_phone_redaction(input_text) {
-  return input_text.replace(/\+?\d[\d\s()-]{7,}\d/g, (match_text) => {
+  return input_text.replace(/\+?\d[\d\s()./-]{7,}\d/g, (match_text) => {
     const digits_only = match_text.replace(/\D/g, "");
-    if (digits_only.length < 7) {
+    if (digits_only.length < 7 || digits_only.length > 15) {
+      return match_text;
+    }
+    // Skip pure digit sequences (IDs, timestamps, etc.) — real phones have separators or leading +
+    const has_phone_formatting = /[+\s().-]/.test(match_text.replace(/^\+/, "x"));
+    if (!has_phone_formatting && digits_only.length > 11) {
       return match_text;
     }
 

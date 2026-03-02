@@ -293,8 +293,8 @@ async function get_event_summary({ eid }, sql) {
   const art_stats = await sql`
     SELECT
       COUNT(*) AS total_artworks,
-      COUNT(CASE WHEN final_price IS NOT NULL AND final_price > 0 THEN 1 END) AS sold_count,
-      COALESCE(SUM(final_price), 0) AS total_revenue,
+      COUNT(CASE WHEN COALESCE(final_price, current_bid) > 0 THEN 1 END) AS sold_count,
+      COALESCE(SUM(COALESCE(final_price, current_bid)), 0) AS total_revenue,
       MAX(final_price) AS highest_sale,
       COUNT(DISTINCT artist_id) AS unique_artists
     FROM art WHERE event_id = ${ev.id}
@@ -389,13 +389,13 @@ async function get_auction_revenue({ eid, group_by }, sql) {
     const rows = await sql`
       SELECT ap.id AS artist_profile_id, ap.name AS artist_name,
              COUNT(a.id) AS artworks_sold,
-             COALESCE(SUM(a.final_price), 0) AS total_revenue,
-             MAX(a.final_price) AS highest_sale,
+             COALESCE(SUM(COALESCE(a.final_price, a.current_bid)), 0) AS total_revenue,
+             MAX(COALESCE(a.final_price, a.current_bid)) AS highest_sale,
              e.currency
       FROM art a
       JOIN events e ON e.id = a.event_id
       LEFT JOIN artist_profiles ap ON ap.id = a.artist_id
-      WHERE e.eid = ${eid} AND a.final_price IS NOT NULL AND a.final_price > 0
+      WHERE e.eid = ${eid} AND COALESCE(a.final_price, a.current_bid) > 0
       GROUP BY ap.id, ap.name, e.currency
       ORDER BY total_revenue DESC
     `;
@@ -406,12 +406,12 @@ async function get_auction_revenue({ eid, group_by }, sql) {
     const rows = await sql`
       SELECT a.round,
              COUNT(a.id) AS artworks_sold,
-             COALESCE(SUM(a.final_price), 0) AS total_revenue,
-             MAX(a.final_price) AS highest_sale,
+             COALESCE(SUM(COALESCE(a.final_price, a.current_bid)), 0) AS total_revenue,
+             MAX(COALESCE(a.final_price, a.current_bid)) AS highest_sale,
              e.currency
       FROM art a
       JOIN events e ON e.id = a.event_id
-      WHERE e.eid = ${eid} AND a.final_price IS NOT NULL AND a.final_price > 0
+      WHERE e.eid = ${eid} AND COALESCE(a.final_price, a.current_bid) > 0
       GROUP BY a.round, e.currency
       ORDER BY a.round
     `;
@@ -422,10 +422,10 @@ async function get_auction_revenue({ eid, group_by }, sql) {
   const rows = await sql`
     SELECT
       COUNT(a.id) AS total_artworks,
-      COUNT(CASE WHEN a.final_price > 0 THEN 1 END) AS sold_count,
-      COALESCE(SUM(a.final_price), 0) AS total_revenue,
-      MAX(a.final_price) AS highest_sale,
-      AVG(a.final_price) FILTER (WHERE a.final_price > 0) AS avg_sale_price,
+      COUNT(CASE WHEN COALESCE(a.final_price, a.current_bid) > 0 THEN 1 END) AS sold_count,
+      COALESCE(SUM(COALESCE(a.final_price, a.current_bid)), 0) AS total_revenue,
+      MAX(COALESCE(a.final_price, a.current_bid)) AS highest_sale,
+      AVG(COALESCE(a.final_price, a.current_bid)) FILTER (WHERE COALESCE(a.final_price, a.current_bid) > 0) AS avg_sale_price,
       e.currency
     FROM art a
     JOIN events e ON e.id = a.event_id
@@ -498,13 +498,12 @@ async function get_eventbrite_fees({ eid }, sql) {
            net_deposit, total_tickets_sold, fetched_at
     FROM eventbrite_api_cache
     WHERE eventbrite_id = ${event[0].eventbrite_id}
-    ORDER BY fetched_at DESC LIMIT 20
+    ORDER BY fetched_at DESC LIMIT 1
   `;
 
   return {
     eventbrite_id: event[0].eventbrite_id,
-    fee_data: cache,
-    count: cache.length
+    fee_data: cache[0] || null
   };
 }
 
