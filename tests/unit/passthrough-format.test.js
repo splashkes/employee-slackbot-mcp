@@ -48,6 +48,12 @@ test("format_value formats arrays as item count", () => {
   assert.equal(format_value([]), "0 items");
 });
 
+test("format_value caps nested object depth at 2", () => {
+  const deep = { a: { b: { c: "too deep" } } };
+  const result = format_value(deep);
+  assert.ok(result.includes("{...}"), "should truncate at depth 2");
+});
+
 // ---------------------------------------------------------------------------
 // format_passthrough_result — error handling
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # Orchestration + Execution Runbook
 
-Last Updated: 2026-03-01
+Last Updated: 2026-03-02
 Owner: Platform Engineering
 
 ## 1. Services
@@ -502,8 +502,76 @@ ORDER BY created_at DESC LIMIT 5;
 | AI masks PII | `services/slackbot/src/openai_router.js` → system prompt | Already handled for ops role |
 | Missing tool parameter | `config/allowed-tools.json` → `parameters_schema` | Add description to guide AI |
 | Duplicate key errors | Tool SQL → add `ON CONFLICT` clause | Upsert instead of insert |
+| PII redaction false positive | `services/slackbot/src/policy.js` | Tighten regex, add guards for numeric IDs |
+| Passthrough steals query | `services/slackbot/src/index.js` → `ANALYSIS_PATTERN` | Add keywords that need GPT review |
+| NULL revenue / zero count | Tool SQL → add `COALESCE(col_a, col_b)` | See §13.1 — `final_price` often NULL |
+| Edge function param mismatch | Tool JS + edge function source | Map MCP params to edge function names |
+| Stale cache data | Operational — not a code fix | Show cache age, suggest refresh |
 
-## 13. Run SQL on Live DB
+## 13. Known Data Pitfalls
+
+Lessons from the March 2026 67-tool QA sweep. These are real production gotchas — not hypothetical.
+
+### 13.1 art.final_price is often NULL
+
+Even for artworks with `status = 'paid'`, `final_price` can be NULL. The winning bid amount lives in `art.current_bid`. Always use `COALESCE(a.final_price, a.current_bid)` for revenue calculations.
+
+### 13.2 vote_weights table is empty
+
+The `vote_weights` table has zero rows across all events. `manual_refresh_vote_weights()` refreshes the *materialized view* `person_vote_weights` — a completely different object. Any LEFT JOIN to `vote_weights` returns nulls. Use `person_vote_weights` if you need weighted vote data.
+
+### 13.3 Eventbrite order_status values
+
+`eventbrite_orders_cache.order_status` has three values: `'placed'`, `'Attending'`, and `'Deleted'`. Most paid orders are `'Attending'`, not `'placed'`. Always filter with `IN ('placed', 'Attending')` to avoid undercounting.
+
+### 13.4 ai_analysis_cache event_id is varchar
+
+The `ai_analysis_cache.event_id` column stores EIDs as varchar (e.g. `'AB3092'`), not UUIDs. Use text comparison: `WHERE event_id = ${eid}`, not a UUID join.
+
+### 13.5 Edge function parameter names differ from MCP tool parameters
+
+Edge functions have their own parameter names that may not match MCP tool schemas. Example: `admin-send-invitation` expects `event_eid` and `artist_number` (entry_id), not `eid` and `artist_profile_id` (UUID). Always check the edge function source at `~/vote26-fresh/supabase/functions/` before wiring up new mutating tools.
+
+### 13.6 Phone regex matches long numeric IDs
+
+Eventbrite IDs (13-digit pure numbers like `1978203691493`) trigger the phone redaction regex. The fix: skip pure digit strings >11 chars that have no phone formatting (spaces, dashes, parens, leading `+`). See `policy.js:apply_phone_redaction`.
+
+### 13.7 redact_text() has default fallback rules
+
+`redact_text(text, [])` with an empty array still applies `["mask_email", "mask_phone"]` as defaults. To skip redaction entirely for ops users, you must not call `redact_text` at all — not just pass an empty rules array.
+
+### 13.8 Mutating tools disabled = GPT may hallucinate success
+
+When `enable_mutating_tools=false`, write tools aren't in GPT's tool list. GPT may call a different tool (e.g., `update_memory` instead of `update_artist_name`) and report success. This is expected behavior — not a code bug. The system prompt should be clear about what the bot can and cannot do.
+
+## 14. Passthrough Mode Routing
+
+### 14.1 Analysis override pattern
+
+Passthrough mode returns raw tool data without a final GPT call. The `ANALYSIS_PATTERN` regex in `index.js` forces GPT review for queries that need interpretation:
+
+```javascript
+const ANALYSIS_PATTERN = /\b(analy[sz]e|evaluat|compar|explain|interpret|assess|why\s|generat|chart|graph|visuali[sz])/i;
+```
+
+If a new tool needs GPT review (e.g., chart generation), ensure its trigger words are in this pattern. Without this, passthrough will steal the request and return raw JSON instead of generated output.
+
+### 14.2 Debugging passthrough theft
+
+Symptom: user asks for a chart/analysis but gets raw JSON data instead.
+Check: query `esbmcp_chat_sessions` for `api_rounds=1` — this indicates passthrough was triggered.
+Fix: add the missing keyword to `ANALYSIS_PATTERN` in `services/slackbot/src/index.js`.
+
+## 15. Run SQL on Live DB
+
+### Local psql wrapper
+
+The `~/bin/kpsql` script extracts `SUPABASE_DB_URL` from `orchestration-secrets` and connects via psql:
+```bash
+~/bin/kpsql   # opens interactive psql session against production DB
+```
+
+### Exec into a pod
 
 For quick one-off queries, exec into a pod:
 ```bash

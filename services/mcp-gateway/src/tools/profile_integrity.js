@@ -230,13 +230,12 @@ async function get_event_readiness({ eid }, sql) {
   if (event.length === 0) return { error: `No event found for eid=${eid}` };
   const ev = event[0];
 
-  const artists = await sql`
-    SELECT COUNT(DISTINCT a.artist_id) AS artist_count,
-           COUNT(a.id) AS artwork_count
-    FROM art a WHERE a.event_id = ${ev.id}
-  `;
-
-  const [invitations, confirmations, applications] = await Promise.all([
+  const [artists, invitations, confirmations, applications] = await Promise.all([
+    sql`
+      SELECT COUNT(DISTINCT a.artist_id) AS artist_count,
+             COUNT(a.id) AS artwork_count
+      FROM art a WHERE a.event_id = ${ev.id}
+    `,
     sql`
       SELECT status, COUNT(*) AS cnt
       FROM artist_invitations
@@ -337,6 +336,7 @@ async function refresh_vote_weights({ eid }, sql, _edge, service_config) {
 async function get_qr_scan_status({ eid, person_id }, sql) {
   if (person_id) { const err = require_uuid(person_id, "person_id"); if (err) return err; }
   let rows;
+  let total_count;
 
   if (person_id) {
     rows = await sql`
@@ -377,10 +377,10 @@ async function get_qr_scan_status({ eid, person_id }, sql) {
       `
     ]);
     rows = detail;
-    rows._total = Number(total[0].cnt);
+    total_count = Number(total[0].cnt);
   }
 
-  return { scans: rows, count: rows._total || rows.length, returned: rows.length };
+  return { scans: rows, count: total_count || rows.length, returned: rows.length };
 }
 
 const profile_integrity_tools = {

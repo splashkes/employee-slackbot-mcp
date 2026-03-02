@@ -295,7 +295,7 @@ async function get_event_summary({ eid }, sql) {
       COUNT(*) AS total_artworks,
       COUNT(CASE WHEN COALESCE(final_price, current_bid) > 0 THEN 1 END) AS sold_count,
       COALESCE(SUM(COALESCE(final_price, current_bid)), 0) AS total_revenue,
-      MAX(final_price) AS highest_sale,
+      MAX(COALESCE(final_price, current_bid)) AS highest_sale,
       COUNT(DISTINCT artist_id) AS unique_artists
     FROM art WHERE event_id = ${ev.id}
   `;
