@@ -405,7 +405,7 @@
     {
       "tool_name": "get_eventbrite_data",
       "passthrough": true,
-      "description": "Read locally cached Eventbrite ticket data for an event. WARNING: This reads from a local cache that may be hours or days old — it does NOT call the Eventbrite API. If the user asks to refresh, update, or get the latest data, use refresh_eventbrite_data instead. Use this only when cached/historical data is acceptable.",
+      "description": "Get Eventbrite ticket sales data for an event — includes ticket types, quantities sold, gross revenue, and attendee counts. This is the primary tool for answering questions about ticket sales, attendance, or Eventbrite revenue. Data is from a local cache (use refresh_eventbrite_data first if the user needs the very latest numbers).",
       "risk_level": "low",
       "domain": "data-read",
       "allowed_roles": [
@@ -432,7 +432,7 @@
     },
     {
       "tool_name": "get_eventbrite_mapping",
-      "description": "Check which Eventbrite event ID is linked to an AB event. Use when someone needs to verify the Eventbrite-to-AB event mapping.",
+      "description": "Check which Eventbrite event ID is linked to an Art Battle event. Only use when someone specifically asks about the EB↔AB event mapping or Eventbrite event ID — not for ticket sales data (use get_eventbrite_data for that).",
       "risk_level": "low",
       "domain": "data-read",
       "allowed_roles": [
@@ -648,7 +648,7 @@
     },
     {
       "tool_name": "send_artist_invitation",
-      "description": "Send an invitation to an artist for an event. WRITE OPERATION via edge function. Use when someone asks to invite a specific artist to compete at an event.",
+      "description": "Send an invitation to an artist for an event. WRITE OPERATION via edge function. Use when someone asks to invite a specific artist to compete at an event. Pick the nearest upcoming event matching the user's city/description.",
       "risk_level": "high",
       "domain": "profile-integrity",
       "allowed_roles": [
@@ -662,16 +662,22 @@
         "type": "object",
         "properties": {
           "eid": {
-            "type": "string"
+            "type": "string",
+            "description": "Event identifier (e.g. AB4007). Pick the nearest upcoming event if user doesn't specify."
           },
           "artist_profile_id": {
             "type": "string",
-            "description": "UUID of artist profile to invite"
+            "description": "UUID of artist profile to invite — use lookup_artist_profile to resolve names first"
+          },
+          "message_from_producer": {
+            "type": "string",
+            "description": "Short invitation message for the artist (required). E.g. 'We'd love to have you compete at our Toronto event!'"
           }
         },
         "required": [
           "eid",
-          "artist_profile_id"
+          "artist_profile_id",
+          "message_from_producer"
         ],
         "additionalProperties": false
       }
@@ -955,7 +961,7 @@
     {
       "tool_name": "get_artists_owed",
       "passthrough": true,
-      "description": "Calculate how much money is owed to artists. Uses the production formula: credits = art sales (status='paid') * event's artist_auction_portion, debits = all non-cancelled payments. Can query by event, by artist_profile_id, or with NO parameters to get ALL unpaid artists globally. For large result sets (>25 artists) returns a summary with top 20 and currency totals. Use when someone asks about an artist's balance, how much they're owed, outstanding payments, who needs to be paid, or all unpaid artists.",
+      "description": "Calculate how much money is owed to artists. IMPORTANT: Call with NO parameters to get ALL unpaid artists globally — only pass eid or artist_profile_id when the user explicitly names a specific event or artist. Do NOT infer an eid from conversation context. Uses the production formula: credits = art sales (status='paid') * event's artist_auction_portion, debits = all non-cancelled payments. For large result sets (>25 artists) returns a summary with top 20 and currency totals.",
       "risk_level": "low",
       "domain": "payments",
       "allowed_roles": [
@@ -971,7 +977,7 @@
         "properties": {
           "eid": {
             "type": "string",
-            "description": "Event ID (e.g. AB4001). Shows all artists owed for this event."
+            "description": "Optional event ID (e.g. AB4001). Only pass this if the user explicitly asks about a specific event. Omit to get all artists owed globally."
           },
           "artist_profile_id": {
             "type": "string",

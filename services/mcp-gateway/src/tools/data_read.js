@@ -18,6 +18,7 @@ async function lookup_event({ eid, city, limit }, sql) {
       SELECT
         e.id, e.eid, e.name, e.event_start_datetime, e.event_end_datetime,
         e.timezone_icann,
+        (e.event_start_datetime AT TIME ZONE COALESCE(e.timezone_icann, 'UTC'))::text AS local_start,
         e.enabled, e.currency, e.show_in_app, e.event_level,
         e.city_id, c.name AS city_name, c.country_id,
         e.venue_id, v.name AS venue_name
@@ -25,7 +26,8 @@ async function lookup_event({ eid, city, limit }, sql) {
       LEFT JOIN cities c ON c.id = e.city_id
       LEFT JOIN venues v ON v.id = e.venue_id
       WHERE c.name ILIKE ${'%' + city + '%'}
-      ORDER BY e.event_start_datetime DESC
+        AND e.event_start_datetime >= NOW()
+      ORDER BY e.event_start_datetime ASC
       LIMIT ${max_rows}
     `;
     return { events: rows, count: rows.length, search: { city } };
@@ -37,6 +39,7 @@ async function lookup_event({ eid, city, limit }, sql) {
     SELECT
       e.id, e.eid, e.name, e.event_start_datetime, e.event_end_datetime,
       e.timezone_icann,
+      (e.event_start_datetime AT TIME ZONE COALESCE(e.timezone_icann, 'UTC'))::text AS local_start,
       e.enabled, e.currency, e.show_in_app, e.event_level,
       e.eventbrite_id, e.meta_ads_budget, e.capacity,
       e.city_id, c.name AS city_name, c.country_id,

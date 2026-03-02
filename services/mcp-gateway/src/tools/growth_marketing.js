@@ -3,29 +3,42 @@
 
 async function get_meta_ads_data({ eid }, sql) {
   const event = await sql`
-    SELECT e.id, e.eid, e.name, e.meta_ads_budget, e.other_ads_budget
+    SELECT e.id, e.eid, e.name, e.meta_ads_budget, e.other_ads_budget,
+           e.event_start_datetime
     FROM events e WHERE e.eid = ${eid} LIMIT 1
   `;
 
   if (event.length === 0) return { error: `No event found for eid=${eid}` };
 
-  // meta_ads_cache_cron_log is a cron log table (not per-event).
-  // Fetch the latest cron run status separately.
-  const cron_log = await sql`
-    SELECT id, executed_at, status, total_events, successful, failed,
-           skipped, errors, duration_ms, response
-    FROM meta_ads_cache_cron_log
-    ORDER BY executed_at DESC
-    LIMIT 1
-  `;
+  const [campaign_cache, cron_log] = await Promise.all([
+    sql`
+      SELECT result, created_at, expires_at
+      FROM ai_analysis_cache
+      WHERE event_id = ${eid} AND analysis_type = 'meta_ads'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `,
+    sql`
+      SELECT id, executed_at, status, total_events, successful, failed,
+             skipped, errors, duration_ms
+      FROM meta_ads_cache_cron_log
+      ORDER BY executed_at DESC
+      LIMIT 1
+    `
+  ]);
+
+  const campaign_data = campaign_cache.length > 0 ? campaign_cache[0].result : null;
 
   return {
     event: {
       eid: event[0].eid,
       name: event[0].name,
       meta_ads_budget: event[0].meta_ads_budget,
-      other_ads_budget: event[0].other_ads_budget
+      other_ads_budget: event[0].other_ads_budget,
+      event_date: event[0].event_start_datetime
     },
+    campaign: campaign_data,
+    campaign_cache_age: campaign_cache.length > 0 ? campaign_cache[0].created_at : null,
     latest_cron_sync: cron_log.length > 0 ? cron_log[0] : null
   };
 }
@@ -40,6 +53,7 @@ async function get_sms_campaigns({ eid, status }, sql) {
       SELECT smc.id, smc.name, smc.status, smc.template_id,
              smc.targeting_criteria, smc.scheduled_at, smc.started_at,
              smc.total_recipients, smc.messages_sent, smc.messages_delivered,
+             smc.metadata->>'message_template' AS message_body,
              smc.created_at,
              e.eid, e.name AS event_name
       FROM sms_marketing_campaigns smc
@@ -52,6 +66,7 @@ async function get_sms_campaigns({ eid, status }, sql) {
       SELECT smc.id, smc.name, smc.status, smc.template_id,
              smc.scheduled_at, smc.started_at,
              smc.total_recipients, smc.messages_sent, smc.messages_delivered,
+             smc.metadata->>'message_template' AS message_body,
              smc.created_at,
              e.eid, e.name AS event_name
       FROM sms_marketing_campaigns smc

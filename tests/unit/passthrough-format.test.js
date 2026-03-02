@@ -38,6 +38,16 @@ test("format_value passes through regular strings", () => {
   assert.equal(format_value("hello"), "hello");
 });
 
+test("format_value formats plain objects instead of [object Object]", () => {
+  assert.equal(format_value({ sold: 10, pending: 5 }), "Sold: 10, Pending: 5");
+  assert.equal(format_value({}), "_empty_");
+});
+
+test("format_value formats arrays as item count", () => {
+  assert.equal(format_value([1, 2, 3]), "3 items");
+  assert.equal(format_value([]), "0 items");
+});
+
 // ---------------------------------------------------------------------------
 // format_passthrough_result — error handling
 // ---------------------------------------------------------------------------

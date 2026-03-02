@@ -193,19 +193,30 @@ async function get_artist_invitations({ eid, artist_profile_id }, sql) {
   return { invitations: rows, count: rows.length, confirmed: confirmed.length, pending: pending.length };
 }
 
-async function send_artist_invitation({ eid, artist_profile_id }, _sql, edge, service_config) {
+async function send_artist_invitation({ eid, artist_profile_id, message_from_producer }, sql, edge, service_config) {
   if (!service_config.gateway.enable_mutating_tools) {
     throw new Error("Mutating tools are disabled by policy");
   }
-
+  const id_err = require_uuid(artist_profile_id, "artist_profile_id"); if (id_err) return id_err;
   if (!edge) throw new Error("Edge function client not configured");
+  if (!message_from_producer || !message_from_producer.trim()) {
+    return { error: "message_from_producer is required — provide a short invitation message for the artist." };
+  }
+
+  const artist = await sql`
+    SELECT id, entry_id, name FROM artist_profiles WHERE id = ${artist_profile_id}::uuid LIMIT 1
+  `;
+  if (artist.length === 0) return { error: `Artist profile ${artist_profile_id} not found` };
+  if (!artist[0].entry_id) return { error: `Artist ${artist[0].name} has no entry_id — cannot send invitation` };
 
   const result = await edge.invoke("admin-send-invitation", {
-    eid,
-    artist_profile_id
+    event_eid: eid,
+    artist_number: artist[0].entry_id,
+    artist_profile_id,
+    message_from_producer: message_from_producer.trim()
   });
 
-  return { sent: true, result };
+  return { sent: true, artist_name: artist[0].name, eid, result };
 }
 
 async function get_event_readiness({ eid }, sql) {
@@ -225,19 +236,34 @@ async function get_event_readiness({ eid }, sql) {
     FROM art a WHERE a.event_id = ${ev.id}
   `;
 
-  const invitations = await sql`
-    SELECT status, COUNT(*) AS cnt
-    FROM artist_invitations
-    WHERE event_eid = ${ev.eid}
-    GROUP BY status
-  `;
+  const [invitations, confirmations, applications] = await Promise.all([
+    sql`
+      SELECT status, COUNT(*) AS cnt
+      FROM artist_invitations
+      WHERE event_eid = ${ev.eid}
+      GROUP BY status
+    `,
+    sql`
+      SELECT COUNT(*) AS cnt
+      FROM artist_confirmations
+      WHERE event_eid = ${ev.eid}
+        AND confirmation_status = 'confirmed'
+    `,
+    sql`
+      SELECT COUNT(*) AS cnt
+      FROM artist_applications
+      WHERE event_eid = ${ev.eid}
+    `
+  ]);
+
+  const confirmed_count = Number(confirmations[0]?.cnt || 0);
 
   const readiness = {
     has_venue: !!ev.venue_id,
     has_city: !!ev.city_id,
     has_currency: !!ev.currency,
     has_start_time: !!ev.event_start_datetime,
-    has_artists: Number(artists[0].artist_count) > 0,
+    has_artists: confirmed_count > 0 || Number(artists[0].artist_count) > 0,
     has_eventbrite: !!ev.eventbrite_id,
     enabled: ev.enabled,
     show_in_app: ev.show_in_app
@@ -250,9 +276,11 @@ async function get_event_readiness({ eid }, sql) {
     event: { eid: ev.eid, name: ev.name, enabled: ev.enabled },
     readiness,
     score: `${ready_count}/${total_checks}`,
-    artist_count: Number(artists[0].artist_count),
-    artwork_count: Number(artists[0].artwork_count),
-    invitations: Object.fromEntries(invitations.map((i) => [i.status, Number(i.cnt)]))
+    applications: Number(applications[0]?.cnt || 0),
+    confirmed_artists: confirmed_count,
+    invited_artists: Object.fromEntries(invitations.map((i) => [i.status, Number(i.cnt)])),
+    artists_with_artwork: Number(artists[0].artist_count),
+    artwork_count: Number(artists[0].artwork_count)
   };
 }
 
@@ -330,20 +358,29 @@ async function get_qr_scan_status({ eid, person_id }, sql) {
     `;
     if (event.length === 0) return { error: `No event found for eid=${eid}` };
 
-    rows = await sql`
-      SELECT qr.id, COALESCE(qr.code, pqs.qr_code) AS code,
-             pqs.scan_timestamp, pqs.person_id,
-             p.first_name, p.last_name, p.email
-      FROM people_qr_scans pqs
-      LEFT JOIN qr_codes qr ON qr.code = pqs.qr_code
-      JOIN people p ON p.id = pqs.person_id
-      WHERE pqs.event_id = ${event[0].id}
-      ORDER BY pqs.scan_timestamp DESC
-      LIMIT 200
-    `;
+    const [detail, total] = await Promise.all([
+      sql`
+        SELECT qr.id, COALESCE(qr.code, pqs.qr_code) AS code,
+               pqs.scan_timestamp, pqs.person_id,
+               p.first_name, p.last_name, p.email
+        FROM people_qr_scans pqs
+        LEFT JOIN qr_codes qr ON qr.code = pqs.qr_code
+        JOIN people p ON p.id = pqs.person_id
+        WHERE pqs.event_id = ${event[0].id}
+        ORDER BY pqs.scan_timestamp DESC
+        LIMIT 200
+      `,
+      sql`
+        SELECT COUNT(*) AS cnt
+        FROM people_qr_scans
+        WHERE event_id = ${event[0].id}
+      `
+    ]);
+    rows = detail;
+    rows._total = Number(total[0].cnt);
   }
 
-  return { scans: rows, count: rows.length };
+  return { scans: rows, count: rows._total || rows.length, returned: rows.length };
 }
 
 const profile_integrity_tools = {

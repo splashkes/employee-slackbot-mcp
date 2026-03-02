@@ -16,6 +16,12 @@ function format_value(value) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") return value.toLocaleString("en-US");
   if (typeof value === "string" && value.length === 0) return "_empty_";
+  if (Array.isArray(value)) return `${value.length} items`;
+  if (typeof value === "object") {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return "_empty_";
+    return entries.map(([k, v]) => `${humanize_key(k)}: ${format_value(v)}`).join(", ");
+  }
   return String(value);
 }
 

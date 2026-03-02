@@ -371,6 +371,8 @@ async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
     }
   }
 
+  const refresh_errors = [];
+
   // Refresh totals via Edge Function (writes to eventbrite_api_cache)
   if (_edge) {
     try {
@@ -380,7 +382,8 @@ async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
         fetch_reason: "mcp_refresh"
       });
     } catch (err) {
-      // Non-fatal — we can still use existing cache
+      console.error(`[refresh_eventbrite_data] Edge function fetch-eventbrite-data failed for ${eid}:`, err.message);
+      refresh_errors.push(`Totals refresh failed: ${err.message}`);
     }
   }
 
@@ -412,7 +415,8 @@ async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
         `;
       }
     } catch (err) {
-      // Non-fatal — charts will use whatever data exists in cache
+      console.error(`[refresh_eventbrite_data] Attendee fetch failed for ${eid}:`, err.message);
+      refresh_errors.push(`Attendee fetch failed: ${err.status === 403 ? 'API returned 403 — check event is published and API token has read scope' : err.message}`);
     }
   }
 
@@ -431,7 +435,8 @@ async function refresh_eventbrite_data({ eid, force }, sql, _edge, config) {
     gross_revenue: parseFloat(latest[0]?.gross_revenue) || 0,
     net_deposit: parseFloat(latest[0]?.net_deposit) || 0,
     total_fees: parseFloat(latest[0]?.total_fees) || 0,
-    fetched_at: latest[0]?.fetched_at || new Date().toISOString()
+    fetched_at: latest[0]?.fetched_at || new Date().toISOString(),
+    ...(refresh_errors.length > 0 ? { warnings: refresh_errors } : {})
   };
 }
 

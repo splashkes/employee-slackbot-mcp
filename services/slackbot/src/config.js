@@ -68,7 +68,7 @@ const service_config = {
     directory_cache_ttl_sec: parse_number(process.env.DIRECTORY_CACHE_TTL_SEC, 300)
   },
   limits: {
-    request_max_chars: parse_number(process.env.REQUEST_MAX_CHARS, 4000),
+    request_max_chars: parse_number(process.env.REQUEST_MAX_CHARS, 12000),
     response_max_chars: parse_number(process.env.RESPONSE_MAX_CHARS, 3500)
   },
   rate_limit: {
