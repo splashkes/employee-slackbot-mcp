@@ -1,6 +1,8 @@
 // growth_marketing domain — 7 read-only tools
 // Skills: 31, 33-35, 48-49
 
+import { require_event } from "../tool_helpers.js";
+
 async function get_meta_ads_data({ eid }, sql) {
   const event = await sql`
     SELECT e.id, e.eid, e.name, e.meta_ads_budget, e.other_ads_budget,
@@ -81,11 +83,8 @@ async function get_sms_campaigns({ eid, status }, sql) {
 }
 
 async function get_sms_audience_count({ eid, audience_filter }, sql) {
-  const event = await sql`
-    SELECT id, eid FROM events WHERE eid = ${eid} LIMIT 1
-  `;
-
-  if (event.length === 0) return { error: `No event found for eid=${eid}` };
+  const ev = await require_event(eid, sql);
+  if (ev.error) return ev;
 
   // Basic audience count — count people associated with the event's city
   // or who have attended/bid at similar events
@@ -99,7 +98,7 @@ async function get_sms_audience_count({ eid, audience_filter }, sql) {
       FROM people p
       JOIN votes v ON v.person_id = p.id
       JOIN art a ON a.id = v.art_uuid
-      WHERE a.event_id = ${event[0].id}
+      WHERE a.event_id = ${ev.id}
         AND p.phone IS NOT NULL AND p.phone != ''
     `;
   } else if (filter === "bidders") {
@@ -108,7 +107,7 @@ async function get_sms_audience_count({ eid, audience_filter }, sql) {
       FROM people p
       JOIN bids b ON b.person_id = p.id
       JOIN art a ON a.id = b.art_id
-      WHERE a.event_id = ${event[0].id}
+      WHERE a.event_id = ${ev.id}
         AND p.phone IS NOT NULL AND p.phone != ''
     `;
   } else if (filter === "all_with_phone") {
@@ -158,11 +157,8 @@ async function get_sms_conversation({ phone }, sql) {
 }
 
 async function get_notification_status({ eid }, sql) {
-  const event = await sql`
-    SELECT id, eid FROM events WHERE eid = ${eid} LIMIT 1
-  `;
-
-  if (event.length === 0) return { error: `No event found for eid=${eid}` };
+  const ev = await require_event(eid, sql);
+  if (ev.error) return ev;
 
   // sms_outbound has campaign_id, not event_id.
   // Join through sms_marketing_campaigns to filter by event.
@@ -170,7 +166,7 @@ async function get_notification_status({ eid }, sql) {
     SELECT so.status, COUNT(*) AS cnt
     FROM sms_outbound so
     JOIN sms_marketing_campaigns smc ON smc.id = so.campaign_id
-    WHERE smc.event_id = ${event[0].id}
+    WHERE smc.event_id = ${ev.id}
     GROUP BY so.status
   `;
 
@@ -179,7 +175,7 @@ async function get_notification_status({ eid }, sql) {
     SELECT mq.status, COUNT(*) AS cnt
     FROM message_queue mq
     JOIN sms_marketing_campaigns smc ON smc.id = mq.campaign_id
-    WHERE smc.event_id = ${event[0].id}
+    WHERE smc.event_id = ${ev.id}
     GROUP BY mq.status
   `;
 
@@ -235,32 +231,33 @@ async function get_sponsorship_summary({ eid }, sql) {
   const event = await sql`
     SELECT id, eid, name FROM events WHERE eid = ${eid} LIMIT 1
   `;
-
   if (event.length === 0) return { error: `No event found for eid=${eid}` };
+  const ev = event[0];
 
-  const invites = await sql`
-    SELECT si.id, si.prospect_name, si.prospect_email, si.discount_percent,
-           si.notes, si.created_at, si.last_viewed_at, si.view_count
-    FROM sponsorship_invites si
-    WHERE si.event_id = ${event[0].id}
-    ORDER BY si.created_at DESC
-  `;
-
-  const purchases = await sql`
-    SELECT sp.id, sp.buyer_name, sp.buyer_email, sp.buyer_company,
-           sp.package_details, sp.total_amount, sp.currency,
-           sp.payment_status, sp.created_at
-    FROM sponsorship_purchases sp
-    WHERE sp.event_id = ${event[0].id}
-    ORDER BY sp.created_at DESC
-  `;
+  const [invites, purchases] = await Promise.all([
+    sql`
+      SELECT si.id, si.prospect_name, si.prospect_email, si.discount_percent,
+             si.notes, si.created_at, si.last_viewed_at, si.view_count
+      FROM sponsorship_invites si
+      WHERE si.event_id = ${ev.id}
+      ORDER BY si.created_at DESC
+    `,
+    sql`
+      SELECT sp.id, sp.buyer_name, sp.buyer_email, sp.buyer_company,
+             sp.package_details, sp.total_amount, sp.currency,
+             sp.payment_status, sp.created_at
+      FROM sponsorship_purchases sp
+      WHERE sp.event_id = ${ev.id}
+      ORDER BY sp.created_at DESC
+    `
+  ]);
 
   const total_committed = purchases
     .filter((p) => p.payment_status === "paid" || p.payment_status === "completed")
     .reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
 
   return {
-    event: { eid: event[0].eid, name: event[0].name },
+    event: { eid: ev.eid, name: ev.name },
     invites,
     purchases,
     invite_count: invites.length,

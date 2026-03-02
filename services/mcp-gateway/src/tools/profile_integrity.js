@@ -1,14 +1,8 @@
 // profile_integrity domain — 10 tools
 // Skills: 6-10, 21, 25, 27
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function require_uuid(value, field_name) {
-  if (!value || !UUID_RE.test(value)) {
-    return { error: `${field_name} must be a valid UUID. Use lookup_artist_profile first to get the real ID.` };
-  }
-  return null;
-}
+import { require_uuid } from "@abcodex/shared/validators.js";
+import { require_mutating, require_edge, require_event } from "../tool_helpers.js";
 
 async function find_duplicate_profiles({ query, search_by }, sql) {
   const field = search_by || "phone";
@@ -58,9 +52,7 @@ async function find_duplicate_profiles({ query, search_by }, sql) {
 
 async function update_artist_name({ artist_profile_id, new_name }, sql, _edge, service_config) {
   const id_err = require_uuid(artist_profile_id, "artist_profile_id"); if (id_err) return id_err;
-  if (!service_config.gateway.enable_mutating_tools) {
-    throw new Error("Mutating tools are disabled by policy");
-  }
+  require_mutating(service_config);
 
   const current = await sql`
     SELECT id, name FROM artist_profiles WHERE id = ${artist_profile_id}::uuid LIMIT 1
@@ -88,9 +80,7 @@ async function update_artist_name({ artist_profile_id, new_name }, sql, _edge, s
 
 async function update_artist_bio({ artist_profile_id, new_bio }, sql, _edge, service_config) {
   const id_err = require_uuid(artist_profile_id, "artist_profile_id"); if (id_err) return id_err;
-  if (!service_config.gateway.enable_mutating_tools) {
-    throw new Error("Mutating tools are disabled by policy");
-  }
+  require_mutating(service_config);
 
   const current = await sql`
     SELECT id, abhq_bio FROM artist_profiles WHERE id = ${artist_profile_id}::uuid LIMIT 1
@@ -117,9 +107,7 @@ async function update_artist_bio({ artist_profile_id, new_bio }, sql, _edge, ser
 
 async function update_artist_country({ artist_profile_id, new_country }, sql, _edge, service_config) {
   const id_err = require_uuid(artist_profile_id, "artist_profile_id"); if (id_err) return id_err;
-  if (!service_config.gateway.enable_mutating_tools) {
-    throw new Error("Mutating tools are disabled by policy");
-  }
+  require_mutating(service_config);
 
   const current = await sql`
     SELECT id, country FROM artist_profiles WHERE id = ${artist_profile_id}::uuid LIMIT 1
@@ -194,11 +182,9 @@ async function get_artist_invitations({ eid, artist_profile_id }, sql) {
 }
 
 async function send_artist_invitation({ eid, artist_profile_id, message_from_producer }, sql, edge, service_config) {
-  if (!service_config.gateway.enable_mutating_tools) {
-    throw new Error("Mutating tools are disabled by policy");
-  }
+  require_mutating(service_config);
   const id_err = require_uuid(artist_profile_id, "artist_profile_id"); if (id_err) return id_err;
-  if (!edge) throw new Error("Edge function client not configured");
+  require_edge(edge);
   if (!message_from_producer || !message_from_producer.trim()) {
     return { error: "message_from_producer is required — provide a short invitation message for the artist." };
   }
@@ -319,16 +305,12 @@ async function get_vote_weights({ eid, round }, sql) {
 }
 
 async function refresh_vote_weights({ eid }, sql, _edge, service_config) {
-  if (!service_config.gateway.enable_mutating_tools) {
-    throw new Error("Mutating tools are disabled by policy");
-  }
+  require_mutating(service_config);
 
-  const event = await sql`
-    SELECT id, eid FROM events WHERE eid = ${eid} LIMIT 1
-  `;
-  if (event.length === 0) return { error: `No event found for eid=${eid}` };
+  const ev = await require_event(eid, sql);
+  if (ev.error) return ev;
 
-  const result = await sql`SELECT manual_refresh_vote_weights(${event[0].id})`;
+  const result = await sql`SELECT manual_refresh_vote_weights(${ev.id})`;
 
   return { refreshed: true, eid, result: result[0] };
 }
@@ -353,10 +335,8 @@ async function get_qr_scan_status({ eid, person_id }, sql) {
       LIMIT 50
     `;
   } else {
-    const event = await sql`
-      SELECT id FROM events WHERE eid = ${eid} LIMIT 1
-    `;
-    if (event.length === 0) return { error: `No event found for eid=${eid}` };
+    const ev = await require_event(eid, sql);
+    if (ev.error) return ev;
 
     const [detail, total] = await Promise.all([
       sql`
@@ -366,14 +346,14 @@ async function get_qr_scan_status({ eid, person_id }, sql) {
         FROM people_qr_scans pqs
         LEFT JOIN qr_codes qr ON qr.code = pqs.qr_code
         JOIN people p ON p.id = pqs.person_id
-        WHERE pqs.event_id = ${event[0].id}
+        WHERE pqs.event_id = ${ev.id}
         ORDER BY pqs.scan_timestamp DESC
         LIMIT 200
       `,
       sql`
         SELECT COUNT(*) AS cnt
         FROM people_qr_scans
-        WHERE event_id = ${event[0].id}
+        WHERE event_id = ${ev.id}
       `
     ]);
     rows = detail;

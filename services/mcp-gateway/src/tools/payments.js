@@ -1,14 +1,8 @@
 // payments domain — 9 tools
 // Skills: 11-16
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function require_uuid(value, field_name) {
-  if (!value || !UUID_RE.test(value)) {
-    return { error: `${field_name} must be a valid UUID. Use lookup_artist_profile or lookup_person first to get the real ID.` };
-  }
-  return null;
-}
+import { require_uuid } from "@abcodex/shared/validators.js";
+import { require_mutating, require_edge } from "../tool_helpers.js";
 
 async function get_artist_stripe_status({ artist_profile_id, eid }, sql) {
   if (artist_profile_id) { const err = require_uuid(artist_profile_id, "artist_profile_id"); if (err) return err; }
@@ -49,11 +43,8 @@ async function get_artist_stripe_status({ artist_profile_id, eid }, sql) {
 }
 
 async function process_artist_payment({ eid, artist_profile_id, amount, currency }, _sql, edge, service_config) {
-  if (!service_config.gateway.enable_mutating_tools) {
-    throw new Error("Mutating tools are disabled by policy");
-  }
-
-  if (!edge) throw new Error("Edge function client not configured");
+  require_mutating(service_config);
+  require_edge(edge);
 
   const result = await edge.invoke("auto-process-artist-payments", {
     eid,
@@ -387,11 +378,8 @@ async function get_payment_invitations({ eid, artist_profile_id }, sql) {
 }
 
 async function send_payment_reminder({ eid, artist_profile_id }, _sql, edge, service_config) {
-  if (!service_config.gateway.enable_mutating_tools) {
-    throw new Error("Mutating tools are disabled by policy");
-  }
-
-  if (!edge) throw new Error("Edge function client not configured");
+  require_mutating(service_config);
+  require_edge(edge);
 
   const result = await edge.invoke("admin-send-payment-reminder", {
     eid,

@@ -9,6 +9,7 @@
     "./env_parsers.js": "./env_parsers.js",
     "./tool_manifest.js": "./tool_manifest.js",
     "./signing.js": "./signing.js",
-    "./constants.js": "./constants.js"
+    "./constants.js": "./constants.js",
+    "./validators.js": "./validators.js"
   }
 }

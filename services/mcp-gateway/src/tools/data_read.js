@@ -1,14 +1,7 @@
 // data_read domain — 15 read-only SQL tools
 // Skills: 1-5, 17-20, 22-24, 28-30
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function require_uuid(value, field_name) {
-  if (!value || !UUID_RE.test(value)) {
-    return { error: `${field_name} must be a valid UUID. Use lookup_artist_profile or lookup_person first to get the real ID.` };
-  }
-  return null;
-}
+import { require_uuid } from "@abcodex/shared/validators.js";
 
 async function lookup_event({ eid, city, limit }, sql) {
   // Search by city name if no eid provided
